@@ -35,6 +35,11 @@
 #define MICROTCP_INIT_CWND (3 * MICROTCP_MSS)
 #define MICROTCP_INIT_SSTHRESH MICROTCP_WIN_SIZE
 
+#define ACK (0b1 << 12)
+#define RST (0b1 << 13)
+#define SYN (0b1 << 14)
+#define FIN (0b1 << 15)
+
 /**
  * Possible states of the microTCP socket
  *

@@ -29,7 +29,7 @@ microtcp_socket (int domain, int type, int protocol)
   microtcp_sock_t sock;
 
   sock.sd = socket(domain, type, protocol);
-  sock.state = INVALID;
+  sock.state = LISTEN;
   sock.init_win_size = MICROTCP_WIN_SIZE;
   sock.curr_win_size = MICROTCP_WIN_SIZE;
   sock.recvbuf = NULL;
@@ -61,7 +61,33 @@ int
 microtcp_connect (microtcp_sock_t *socket, const struct sockaddr *address,
                   socklen_t address_len)
 {
-  /* Your code here */
+  microtcp_header_t hto;
+  microtcp_header_t hfrom;
+
+  hto.seq_number = 1000;
+  hto.ack_number = 0;
+  hto.control = SYN;
+  hto.window = socket->curr_win_size;
+  hto.data_len = 0;
+  hto.checksum = 0;
+
+  sendto(socket->sd, &hto, sizeof(hto), MSG_CONFIRM, address, address_len);
+
+  recvfrom(socket->sd, &hfrom, sizeof(hfrom), MSG_WAITALL, address, address_len);
+
+  if (hfrom.control != SYN | ACK || hfrom.ack_number !=  hto.seq_number+1)
+    return -1;
+
+  hto.seq_number = hfrom.ack_number;
+  hto.ack_number = hfrom.seq_number+1;
+  hto.control = ACK;
+  hto.window = socket->curr_win_size;
+  hto.window = 0;
+  hto.checksum = 0;
+
+  sendto(socket->sd, &hto, sizeof(hto), MSG_CONFIRM, address, address_len);
+
+  return 0;
 }
 
 int
