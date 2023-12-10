@@ -21,18 +21,40 @@
 #include "microtcp.h"
 #include "../utils/crc32.h"
 
+#include <stdlib.h>
+
 microtcp_sock_t
 microtcp_socket (int domain, int type, int protocol)
 {
-  /* Your code here */
-  /* Initial commit test */
+  microtcp_sock_t sock;
+
+  sock.sd = socket(domain, type, protocol);
+  sock.state = INVALID;
+  sock.init_win_size = MICROTCP_WIN_SIZE;
+  sock.curr_win_size = MICROTCP_WIN_SIZE;
+  sock.recvbuf = NULL;
+  sock.buf_fill_level = 0;
+  sock.cwnd = MICROTCP_INIT_CWND;
+  sock.ssthresh = MICROTCP_INIT_SSTHRESH;
+  sock.seq_number = 0;
+  sock.ack_number = 0;
+
+  sock.packets_send = 0;
+  sock.packets_received = 0;
+  sock.packets_lost = 0;
+
+  sock.packets_send = 0;
+  sock.packets_received = 0;
+  sock.packets_lost = 0;
+
+  return sock;
 }
 
 int
 microtcp_bind (microtcp_sock_t *socket, const struct sockaddr *address,
                socklen_t address_len)
 {
-  /* Your code here */
+  return bind(socket->sd, address, address_len);
 }
 
 int

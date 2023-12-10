@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "microtcp.h": "c",
+        "crc32.h": "c"
+    }
+}
