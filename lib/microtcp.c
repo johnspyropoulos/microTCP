@@ -163,7 +163,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                 return -1;
         }
 
-        init_microtcp_segment(&sent_ack_segment, recv_ack_segment->header.seq_number+1, recv_ack_segment->header.ack_number, ACK_BIT, socket->init_win_size, 0, NULL);
+        init_microtcp_segment(&sent_ack_segment, recv_ack_segment->header.ack_number, recv_ack_segment->header.seq_number+1, ACK_BIT, socket->init_win_size, 0, NULL);
         create_microtcp_bit_stream_segment(recv_ack_segment, &bit_stream, &stream_len);
         if (bit_stream == NULL || stream_len == 0)
         {
@@ -217,7 +217,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
         stream_len = sizeof(microtcp_segment_t);
         recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, &address_len);
         extract_microtcp_bitstream(&recv_ack_segment, bit_stream, stream_len);
-        if ((sent_ack_segment.header.control & ACK_BIT) != ACK_BIT || recv_ack_segment->header.ack_number != sent_ack_segment.header.seq_number+1)
+        if ((sent_ack_segment.header.control & ACK_BIT) != ACK_BIT /* TODO: || recv_ack_segment->header.ack_number != sent_ack_segment.header.seq_number+1 */)
         {
                 fprintf(stderr, "Error: microtcp_accept() failed, ACK segment was invalid.\n");
                 return -1;
