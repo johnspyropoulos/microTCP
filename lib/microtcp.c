@@ -35,6 +35,8 @@
 static void create_microtcp_bit_stream_segment(const microtcp_segment_t *const __segment, void *__bit_stream, size_t *__stream_len);
 static inline void init_microtcp_segment(microtcp_segment_t *const __segment, uint32_t __seq_num, uint32_t __ack_num,
                                         uint16_t __ctrl_bits, uint16_t __win_size, uint32_t __data_len, uint8_t *__payload);
+static inline void extract_bitstream(microtcp_segment_t* segment, void* bitstream);
+
 /* End   of declarations of inner working (helper) functions. */
 
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
@@ -180,100 +182,8 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
 
         recvfrom(socket->sd, &recv_syn_segment, sizeof(recv_syn_segment), MSG_WAITALL, address, address_len);
 
-
         return 0;
 }
-
-/*
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
-                     socklen_t address_len)
-{
-        microtcp_header_t hto;
-        microtcp_header_t hfrom;
-
-        hto.seq_number = 1000;
-        hto.ack_number = 0;
-        hto.control = SYN;
-        hto.window = socket->curr_win_size;
-        hto.data_len = 0;
-        hto.checksum = 0;
-
-        sendto(socket->sd, &hto, sizeof(hto), MSG_CONFIRM, address, address_len);
-
-        recvfrom(socket->sd, &hfrom, sizeof(hfrom), MSG_WAITALL, address, address_len);
-
-        if (hfrom.control != SYN | ACK || hfrom.ack_number != hto.seq_number + 1)
-                return -1;
-
-        hto.seq_number = hfrom.ack_number;
-        hto.ack_number = hfrom.seq_number + 1;
-        hto.control = ACK;
-        hto.window = socket->curr_win_size;
-        hto.window = 0;
-        hto.checksum = 0;
-
-        sendto(socket->sd, &hto, sizeof(hto), MSG_CONFIRM, address, address_len);
-
-        return 0;
-}
-
-int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t address_len)
-{
-        if (socket == NULL || socket->state != LISTEN)
-        {
-                // The socket is not in a state to accept connections
-                return -1;
-        }
-
-        int new_sd = accept(socket->sd, address, address_len);
-        if (new_sd < 0)
-        {
-                perror("Accept failed");
-                return -1;
-        }
-
-        // Initialize a new microTCP socket for the accepted connection
-        microtcp_sock_t new_socket;
-        new_socket.sd = new_sd;
-        new_socket.state = ESTABLISHED;
-        new_socket.init_win_size = MICROTCP_WIN_SIZE;
-        new_socket.curr_win_size = MICROTCP_WIN_SIZE;
-        // Allocate memory for the receive buffer and initialize other fields
-        new_socket.recvbuf = malloc(MICROTCP_RECVBUF_LEN);
-        if (new_socket.recvbuf == NULL)
-        {
-                // Handle memory allocation failure
-                close(new_sd);
-                return -1;
-        }
-        new_socket.buf_fill_level = 0;
-        new_socket.cwnd = MICROTCP_INIT_CWND;
-        new_socket.ssthresh = MICROTCP_INIT_SSTHRESH;
-        new_socket.seq_number = 0; // This would be a random number in a real TCP implementation
-        new_socket.ack_number = 0; // This should be set based on the incoming SYN packet
-
-        // Copy the new socket structure to the user-provided socket
-        *socket = new_socket;
-
-        return 0;
-}
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-COMMENTED_OUT CODE -- OLD NON_WORKING CODE
-*/
 
 int microtcp_shutdown(microtcp_sock_t *socket, int how)
 {
