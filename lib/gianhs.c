@@ -37,8 +37,7 @@ static inline void init_microtcp_segment(microtcp_segment_t *const __segment, ui
                                         uint16_t __ctrl_bits, uint16_t __win_size, uint32_t __data_len, uint8_t *__payload);
 static void extract_microtcp_bitstream(microtcp_segment_t **__segment, void *__bit_stream, const size_t __stream_len);
 
-/* REMOVE BEFORE SUBMISSION. */
-static void print_bitstream(void* stream, size_t length)
+void print_bitstream(void* stream, size_t length)
 {
         char* str = stream;
         for (int i = 0; i < length; i++)
@@ -107,9 +106,9 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address, sockl
         /* Upon successful completion, bind() shall return 0; otherwise,
          * -1 shall be returned and errno set to indicate the error.  */
         int bind_ret_val = bind(socket->sd, address, address_len);
-        if (bind_ret_val == 0)                                   /* Thus bind() was successful. */
-                socket->state = LISTEN;                          /* Socket is ready for incoming connection. */
-        else                                                     /* Bind failed. */
+        if (bind_ret_val == 0)          /* Thus bind() was successful. */
+                socket->state = LISTEN; /* Socket is ready for incoming connection. */
+        else                            /* Bind failed. */
                 fprintf(stderr, "Error: microtcp_bind() failed.\n");
 
         return bind_ret_val;
