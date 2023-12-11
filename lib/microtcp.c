@@ -141,12 +141,47 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
         }
 
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);  /* Sent SYN packet. */
-        /* recvfrom() another segment and checks its flag bits and acknowlegement values. */
-        /* WIP */
-        /* WIP */
-        /* WIP */
-        /* WIP */
-        /* WIP */
+
+        recvfrom(socket->sd, &recv_ack_segment, sizeof(recv_ack_segment), NO_FLAGS_BITS, address, address_len);
+        if (recv_ack_segment.header.control != SYN_BIT | ACK_BIT || recv_ack_segment.header.ack_number != init_segment.header.seq_number+1)
+        {
+                fprintf(stderr, "Error: microtcp_connect() failed, ACK packet was not valid.\n");
+                return -1;
+        }
+
+        init_microtcp_segment(&sent_ack_segment, recv_ack_segment.header.ack_number, recv_ack_segment.header.seq_number+1, ACK_BIT, socket->init_win_size, 0, NULL);
+        create_microtcp_bit_stream_segment(&recv_ack_segment, bit_stream, stream_len);
+        if (bit_stream == NULL || stream_len == 0)
+        {
+                fprintf(stderr, "Error: microtcp_connect() failed, bit-stream conversion failed.\n");
+                return -1;
+        }
+
+        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);
+
+        socket->state = ESTABLISHED;
+
+        return 0;
+}
+
+int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t address_len)
+{
+        if (socket == NULL || socket->state != LISTEN)
+        {
+                if (socket == NULL)
+                        fprintf(stderr, "Error: microtcp_accept() failed, socket address was NULL\n");
+                else
+                        fprintf(stderr, "Error: microtcp_accept() failed, as given socket was not in LISTEN state.\n");
+                return -1;
+        }
+
+        microtcp_segment_t recv_syn_segment;
+        microtcp_segment_t sent_ack_segment;
+
+        recvfrom(socket->sd, &recv_syn_segment, sizeof(recv_syn_segment), MSG_WAITALL, address, address_len);
+
+
+        return 0;
 }
 
 /*
