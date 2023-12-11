@@ -44,16 +44,16 @@ main(int argc, char **argv)
 
     microtcp_sock_t tcpsocket = microtcp_socket(AF_INET, SOCK_DGRAM, 0);
 
-    printf("%d\n", sizeof(microtcp_header_t));
-
     memset(&servaddr, 0, sizeof(servaddr));
 
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
     servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    int r = microtcp_connect(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
-    printf("%d\n", r);
+    tcpsocket.state = LISTEN;
 
+    printf("Attemting to connect...\n");
+    microtcp_connect(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
+    printf("Connected\n");
     return EXIT_SUCCESS;
 }
