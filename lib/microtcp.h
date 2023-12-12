@@ -51,7 +51,7 @@
  */
 typedef enum
 {
-        READY_TO_BIND, /* Create but not yet bound to any address:port. */
+        READY,
         WARNING, /* Socket created, but soft errors occured. */
         LISTEN, /* After bind() the socket it ready for incoming connections. */
         ESTABLISHED, /* After accept() the connection is established. */
@@ -91,6 +91,9 @@ typedef struct
         uint64_t bytes_send;
         uint64_t bytes_received;
         uint64_t bytes_lost;
+
+        struct sockaddr* servaddr;
+        struct sockaddr* cliaddr;
 } microtcp_sock_t;
 
 /*

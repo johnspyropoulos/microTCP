@@ -34,15 +34,15 @@
  */
 static void create_microtcp_bit_stream_segment(const microtcp_segment_t *const __segment, void **__bit_stream, size_t *__stream_len);
 static inline void init_microtcp_segment(microtcp_segment_t *const __segment, uint32_t __seq_num, uint32_t __ack_num,
-                                        uint16_t __ctrl_bits, uint16_t __win_size, uint32_t __data_len, uint8_t *__payload);
+                                         uint16_t __ctrl_bits, uint16_t __win_size, uint32_t __data_len, uint8_t *__payload);
 static void extract_microtcp_bitstream(microtcp_segment_t **__segment, void *__bit_stream, const size_t __stream_len);
 
 /* REMOVE BEFORE SUBMISSION. */
-static void print_bitstream(void* stream, size_t length)
+static void print_bitstream(void *stream, size_t length)
 {
-        char* str = stream;
-        for (int i = 0; i < length; i++)
-                printf("%d | ",  str[i]);
+        char *str = stream;
+        for (size_t i = 0; i < length; i++)
+                printf("%d | ", str[i]);
         printf("\n");
 }
 
@@ -52,7 +52,7 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
 {
         microtcp_sock_t micro_sock;
 
-        micro_sock.state = READY_TO_BIND;
+        micro_sock.state = READY;
         if (domain != AF_INET)
         {
                 fprintf(stderr, "Warning: MicroTCP only accepts AF_INET (IPv4) as its socket domain parameter.\n");
@@ -87,53 +87,65 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
         micro_sock.bytes_received = 0;
         micro_sock.bytes_lost = 0;
 
+        micro_sock.servaddr = NULL;
+        micro_sock.cliaddr = NULL;
+
         return micro_sock;
 }
 
 int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address, socklen_t address_len)
 {
         /* Essential check-ups. Reporting errors. */
-        if (socket == NULL || socket->sd < 0 || socket->state != READY_TO_BIND)
+        if (socket == NULL || socket->sd < 0 || socket->state != READY)
         {
                 if (socket == NULL)
                         fprintf(stderr, "Error: microtcp_bind() failed, socket address was NULL.\n");
                 else if (socket->sd < 0)
                         fprintf(stderr, "Error: File descriptor of MicroTCP socket was invalid.\n");
-                else if (socket->state != READY_TO_BIND)
-                        fprintf(stderr, "Error: MicroTCP socket was not in READY_TO_BIND state.\n");
+                else if (socket->state != READY)
+                        fprintf(stderr, "Error: MicroTCP socket was not in a READY state.\n");
                 return -1;
         }
 
         /* Upon successful completion, bind() shall return 0; otherwise,
          * -1 shall be returned and errno set to indicate the error.  */
         int bind_ret_val = bind(socket->sd, address, address_len);
-        if (bind_ret_val == 0)                                   /* Thus bind() was successful. */
-                socket->state = LISTEN;                          /* Socket is ready for incoming connection. */
-        else                                                     /* Bind failed. */
+        if (bind_ret_val == 0)          /* Thus bind() was successful. */
+                socket->state = LISTEN; /* Socket is ready for incoming connection. */
+        else                            /* Bind failed. */
                 fprintf(stderr, "Error: microtcp_bind() failed.\n");
+
+        memcpy(&(socket->servaddr), address, address_len);
 
         return bind_ret_val;
 }
 
+/* PHASE B TODO: compartmentalize functions even further.
+ *Inner loops will be need for packet loss management.
+ * */
 /** @return Upon successful completion, connect() shall return 0; otherwise, -1 . */
 int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, socklen_t address_len)
 {
-        if (socket == NULL || socket->state != LISTEN)
+        if (socket == NULL || socket->state != READY)
         {
                 if (socket == NULL)
                         fprintf(stderr, "Error: microtcp_connect() failed, socket address was NULL\n");
                 else
-                        fprintf(stderr, "Error: microtcp_connect() failed, as given socket was not in LISTEN state.\n");
+                        fprintf(stderr, "Error: microtcp_connect() failed, as given socket was not in a READY state.\n");
                 return -1;
         }
-        microtcp_segment_t init_segment;
-        microtcp_segment_t* recv_ack_segment;
-        microtcp_segment_t sent_ack_segment;
+        microtcp_segment_t syn_segment;
+        microtcp_segment_t *syn_ack_segment;
+        microtcp_segment_t ack_segment;
+        void *bit_stream = NULL;
+        size_t stream_len = sizeof(microtcp_header_t); /* No payload. */
 
         /* Initialize header of segment: */
         srand(time(NULL));
-                                             /*Rand odd N*/  /*FLAGS*/                        /*payload*/
-        init_microtcp_segment(&init_segment, rand() | 0b1, 0, SYN_BIT, socket->init_win_size, 0, NULL);
+        socket->seq_number = rand() | 0b1;
+        socket->ack_number = 0;
+
+        init_microtcp_segment(&syn_segment, socket->seq_number, socket->ack_number, SYN_BIT, socket->init_win_size, 0, NULL);
         /* data_len is set to zero as we dont sent any payload in SYN phase. */
         /* Function microtcp_connect() is called in SYN phase
          * of the connection. Thus there is no payload. All of
@@ -142,39 +154,61 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
          * */
 
         /* Send connection request to server: */
-        void *bit_stream = NULL;
-        size_t stream_len;
-        create_microtcp_bit_stream_segment(&init_segment, &bit_stream, &stream_len);
-        if (bit_stream == NULL || stream_len == 0)
-        {
-                printf("%p %d\n", bit_stream, stream_len);
-                fprintf(stderr, "Error: microtcp_connect() failed, bit-stream conversion failed.\n");
-                return -1;
-        }
-
-        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);  /* Sent SYN packet. */
-
-        stream_len = sizeof(microtcp_segment_t);
-        recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, (struct sockaddr*) address, &address_len);
-        extract_microtcp_bitstream(&recv_ack_segment, bit_stream, stream_len);
-        if ((recv_ack_segment->header.control & (SYN_BIT | ACK_BIT) != (SYN_BIT | ACK_BIT)) || recv_ack_segment->header.ack_number != init_segment.header.seq_number+1)
-        {
-                fprintf(stderr, "Error: microtcp_connect() failed, ACK packet was not valid.\n");
-                return -1;
-        }
-
-        init_microtcp_segment(&sent_ack_segment, recv_ack_segment->header.ack_number, recv_ack_segment->header.seq_number+1, ACK_BIT, socket->init_win_size, 0, NULL);
-        create_microtcp_bit_stream_segment(recv_ack_segment, &bit_stream, &stream_len);
+        create_microtcp_bit_stream_segment(&syn_segment, &bit_stream, &stream_len);
         if (bit_stream == NULL || stream_len == 0)
         {
                 fprintf(stderr, "Error: microtcp_connect() failed, bit-stream conversion failed.\n");
+                free(bit_stream); /* free bit_stream buffer after sendto() operation. */
+                return -1;
+        }
+        /* Send SYN packet. */
+        ssize_t syn_ret_val = sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);
+        free(bit_stream); /* free bit_stream buffer after sendto() operation. */
+
+        /* Receive SYN, ACK packet. */
+        bit_stream = malloc(stream_len);
+        ssize_t syn_ack_ret_val = recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, (struct sockaddr *)address, &address_len);
+        extract_microtcp_bitstream(&syn_ack_segment, bit_stream, stream_len);
+        if ((syn_ack_segment->header.control & (SYN_BIT | ACK_BIT) != (SYN_BIT | ACK_BIT)))
+        {
+                fprintf(stderr, "Error: microtcp_connect() failed, reply was not an ACK and SYN packet.\n");
+                free(syn_ack_segment);
+                free(bit_stream);
+                return -1;
+        }
+        else if (syn_ack_segment->header.ack_number != syn_segment.header.seq_number + 1)
+        {
+                fprintf(stderr, "Error: microtcp_connect() failed, ack_num and seq_num are not valid.\n");
+                free(syn_ack_segment);
+                free(bit_stream);
                 return -1;
         }
 
-        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);
+        socket->seq_number += 1;
+        socket->ack_number = syn_ack_segment->header.seq_number+1;
+
+        /* Send ACK packet. */
+        init_microtcp_segment(&ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->init_win_size, 0, NULL);
+        create_microtcp_bit_stream_segment(&ack_segment, &bit_stream, &stream_len);
+        if (bit_stream == NULL || stream_len == 0)
+        {
+                fprintf(stderr, "Error: microtcp_connect() failed, bit-stream conversion failed.\n");
+                free(syn_ack_segment);
+                free(bit_stream);
+                return -1;
+        }
+        ssize_t ack_ret_val = sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);
+        
+        free(syn_ack_segment);
+        free(bit_stream);
+        if (syn_ret_val <= 0 || syn_ack_ret_val <= 0 || ack_ret_val <= 0)
+        {
+                fprintf(stderr, "Error: microtcp_connect() failed, 3-way handshake failed.\n");
+        }
+
+        memcpy(&(socket->servaddr), address, address_len);
 
         socket->state = ESTABLISHED;
-
         return 0;
 }
 
@@ -189,10 +223,10 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
                 return -1;
         }
 
-        microtcp_segment_t* recv_syn_segment;
+        microtcp_segment_t *recv_syn_segment;
         microtcp_segment_t sent_ack_segment;
         size_t stream_len = sizeof(microtcp_header_t);
-        void* bit_stream = malloc(stream_len);
+        void *bit_stream = malloc(stream_len);
 
         int ret_val;
         ret_val = recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, &address_len);
@@ -200,30 +234,41 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
         if (recv_syn_segment->header.control != SYN_BIT)
         {
                 fprintf(stderr, "Error: microtcp_accept() failed, SYN segment was invalid\n");
+                free(bit_stream);
                 return -1;
         }
 
-        init_microtcp_segment(&sent_ack_segment, rand() | 0b1, recv_syn_segment->header.seq_number+1, SYN_BIT | ACK_BIT, socket->init_win_size, 0, NULL);
+        socket->seq_number = rand() | 0b1;
+        socket->ack_number = recv_syn_segment->header.seq_number+1;
+
+        init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, SYN_BIT | ACK_BIT, socket->init_win_size, 0, NULL);
         create_microtcp_bit_stream_segment(&sent_ack_segment, &bit_stream, &stream_len);
         if (bit_stream == NULL || stream_len == 0)
         {
                 fprintf(stderr, "Error: microtcp_accept() failed, bit-stream conversion failed.\n");
                 return -1;
         }
-        
+
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);
 
-        microtcp_segment_t* recv_ack_segment;
+        microtcp_segment_t *recv_ack_segment;
         stream_len = sizeof(microtcp_segment_t);
         recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, &address_len);
         extract_microtcp_bitstream(&recv_ack_segment, bit_stream, stream_len);
-        if ((sent_ack_segment.header.control & ACK_BIT) != ACK_BIT /* TODO: || recv_ack_segment->header.ack_number != sent_ack_segment.header.seq_number+1 */)
+        if ((sent_ack_segment.header.control & ACK_BIT) != ACK_BIT || recv_ack_segment->header.ack_number != sent_ack_segment.header.seq_number+1)
         {
                 fprintf(stderr, "Error: microtcp_accept() failed, ACK segment was invalid.\n");
+                free(bit_stream);
                 return -1;
         }
 
+        // TODO: ASK TA: Is this correct? (Undefined). socket->seq_number += 1;
+        socket->ack_number = recv_ack_segment->header.seq_number+1;
+
+        memcpy(&(socket->cliaddr), address, address_len);
         socket->state = ESTABLISHED;
+
+        free(bit_stream);
 
         return 0;
 }
@@ -237,20 +282,97 @@ ssize_t
 microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
               int flags)
 {
-        /* Your code here */
+        if (socket == NULL)
+        {
+                fprintf(stderr, "Error: microtcp_send() failed, socket was NULL.\n");
+                return 1;
+        }
+        if (socket->state != ESTABLISHED)
+        {
+                fprintf(stderr, "Error: microtcp_send() failed, socket was not in ESTABLISHED state.\n");
+                return -1;
+        }
+
+        printf("1\n");
+        /* Send packet */
+        socket->seq_number += length;
+
+        microtcp_segment_t packet;
+        void* bit_stream;
+        size_t stream_len;
+
+        init_microtcp_segment(&packet, socket->seq_number, socket->ack_number, NO_FLAGS_BITS, socket->curr_win_size, length, (char*) buffer);
+        create_microtcp_bit_stream_segment(&packet, &bit_stream, &stream_len);
+
+        struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
+        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
+        
+        printf("2\n");
+
+        /* Receive ACK packet */
+        stream_len = sizeof(microtcp_segment_t);
+        bit_stream = malloc(stream_len);
+
+        socklen_t len = sizeof(*dest);
+        microtcp_segment_t* ack_packet;
+
+        recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, dest, &len);
+        printf("3\n");
+        extract_microtcp_bitstream(&ack_packet, bit_stream, stream_len);
+        if ((ack_packet->header.control & ACK_BIT != ACK_BIT) || (ack_packet->header.ack_number != packet.header.seq_number+1))
+        {
+                fprintf(stderr, "Error: microtcp_send() failed, ACK packet was invalid.\n");
+                return -1;
+        }
+        
+        printf("4\n");
+        return 0;
 }
 
 ssize_t
 microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
-        /* Your code here */
+        if (socket == NULL)
+        {
+                fprintf(stderr, "Error: microtcp_recv() failed, socket was NULL.\n");
+                return 1;
+        }
+        if (socket->state != ESTABLISHED)
+        {
+                fprintf(stderr, "Error: microtcp_recv() failed, socket was not in ESTABLISHED state.\n");
+                return -1;
+        }
+
+        printf("1\n");
+        
+        /* Receive packet */
+        microtcp_segment_t* packet;
+        size_t stream_len = sizeof(microtcp_segment_t) + socket->curr_win_size;
+        void* bit_stream = malloc(stream_len);
+
+        struct sockaddr* src = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
+        socklen_t len = sizeof(src);
+        recvfrom(socket->sd, bit_stream, stream_len, flags, src, &len);
+        extract_microtcp_bitstream(&packet, bit_stream, stream_len);
+
+        printf("2\n");
+
+        socket->ack_number = packet->header.seq_number+1;
+        free(bit_stream);
+
+        /* Send ACK packet */
+        microtcp_segment_t ack_segment;
+        init_microtcp_segment(&ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, 0, NULL);
+        create_microtcp_bit_stream_segment(&ack_segment, &bit_stream, &stream_len);
+        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, src, len);
+        printf("3\n");
+        return 0;
 }
 
 /* Start of definitions of inner working (helper) functions: */
 
-
 static inline void init_microtcp_segment(microtcp_segment_t *const __segment, uint32_t __seq_num, uint32_t __ack_num,
-                                        uint16_t __ctrl_bits, uint16_t __win_size, uint32_t __data_len, uint8_t *const __payload)
+                                         uint16_t __ctrl_bits, uint16_t __win_size, uint32_t __data_len, uint8_t *const __payload)
 {
         __segment->header.seq_number = __seq_num;
         __segment->header.ack_number = __ack_num;
@@ -281,13 +403,13 @@ static void create_microtcp_bit_stream_segment(const microtcp_segment_t *const _
         if (__segment == NULL)
         {
                 fprintf(stderr, "Internal_Error: create_microtcp_net_segment() failed, as segment address was NULL.\n");
-                *__bit_stream = *__stream_len = NULL;
+                *__stream_len = (size_t) (*__bit_stream = NULL);
                 return;
         }
         if ((__segment->header.data_len == 0) != (__segment->payload == NULL)) /* XOR: Checking two conditions at once. */
         {
                 fprintf(stderr, "Internal_Error: create_microtcp_net_segment() failed, as data_len and payload do not match.\n");
-                *__bit_stream = *__stream_len = NULL;
+                *__stream_len = (size_t) (*__bit_stream = NULL);
                 return;
         }
         bit_stream_size += __segment->header.data_len; /* If data_len == 0, then nothing changes. */
@@ -297,11 +419,11 @@ static void create_microtcp_bit_stream_segment(const microtcp_segment_t *const _
         if (bit_stream_buffer == NULL) /* Malloc() failed. */
         {
                 fprintf(stderr, "Error: create_microtcp_bit_stream(): Memory Allocation failed, malloc() failed.\n");
-                *__bit_stream = *__stream_len = NULL;
+                *__stream_len = (size_t) (*__bit_stream = NULL);
                 return;
         }
         /* bit_stream = header + (actual) payload. */
-        memcpy(bit_stream_buffer, &(__segment->header), sizeof(microtcp_header_t)); 
+        memcpy(bit_stream_buffer, &(__segment->header), sizeof(microtcp_header_t));
         memcpy(bit_stream_buffer + sizeof(microtcp_header_t), __segment->payload, __segment->header.data_len);
         *__bit_stream = bit_stream_buffer;
         *__stream_len = bit_stream_size;
@@ -316,7 +438,7 @@ static void extract_microtcp_bitstream(microtcp_segment_t **__segment, void *__b
                 *__segment = NULL;
                 return;
         }
-        microtcp_segment_t *segment = malloc(sizeof(microtcp_segment_t)); 
+        microtcp_segment_t *segment = malloc(sizeof(microtcp_segment_t));
 
         if (segment == NULL)
         {
@@ -325,8 +447,7 @@ static void extract_microtcp_bitstream(microtcp_segment_t **__segment, void *__b
                 return;
         }
         memcpy(&(segment->header), __bit_stream, sizeof(microtcp_header_t));
-        segment->payload = NULL;  /* Set default payoad address. */
-        /* Copy possible payload. */
+        segment->payload = (segment->header.data_len > 0) ? malloc(segment->header.data_len) : NULL;
         memcpy(segment->payload, __bit_stream + sizeof(microtcp_header_t), segment->header.data_len);
         *__segment = segment;
 }
