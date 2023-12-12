@@ -59,5 +59,12 @@ main(int argc, char **argv)
     microtcp_accept(&tcpsocket, (struct sockaddr*) &clientaddr, sizeof(clientaddr));
     printf("Connected\n");
 
+    char buff[1024] = {0};
+    do
+    {
+        microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
+        printf("From client: %s", buff);
+    } while (strcmp(buff, "exit") != 0);
+
     return EXIT_SUCCESS;
 }

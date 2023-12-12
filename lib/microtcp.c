@@ -115,7 +115,8 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address, sockl
         else                            /* Bind failed. */
                 fprintf(stderr, "Error: microtcp_bind() failed.\n");
 
-        memcpy(&(socket->servaddr), address, address_len);
+        socket->servaddr = malloc(address_len);
+        memcpy(socket->servaddr, address, address_len);
 
         return bind_ret_val;
 }
@@ -205,8 +206,9 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
         {
                 fprintf(stderr, "Error: microtcp_connect() failed, 3-way handshake failed.\n");
         }
-
-        memcpy(&(socket->servaddr), address, address_len);
+        
+        socket->servaddr = malloc(address_len);
+        memcpy(socket->servaddr, address, address_len);
 
         socket->state = ESTABLISHED;
         return 0;
@@ -265,7 +267,9 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
         // TODO: ASK TA: Is this correct? (Undefined). socket->seq_number += 1;
         socket->ack_number = recv_ack_segment->header.seq_number+1;
 
-        memcpy(&(socket->cliaddr), address, address_len);
+        socket->cliaddr = malloc(address_len);
+        memcpy(socket->cliaddr, address, address_len);
+
         socket->state = ESTABLISHED;
 
         free(bit_stream);
@@ -293,7 +297,6 @@ microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
                 return -1;
         }
 
-        printf("1\n");
         /* Send packet */
         socket->seq_number += length;
 
@@ -307,7 +310,6 @@ microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
         
-        printf("2\n");
 
         /* Receive ACK packet */
         stream_len = sizeof(microtcp_segment_t);
@@ -317,7 +319,6 @@ microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
         microtcp_segment_t* ack_packet;
 
         recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, dest, &len);
-        printf("3\n");
         extract_microtcp_bitstream(&ack_packet, bit_stream, stream_len);
         if ((ack_packet->header.control & ACK_BIT != ACK_BIT) || (ack_packet->header.ack_number != packet.header.seq_number+1))
         {
@@ -325,7 +326,6 @@ microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
                 return -1;
         }
         
-        printf("4\n");
         return 0;
 }
 
@@ -343,8 +343,6 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
                 return -1;
         }
 
-        printf("1\n");
-        
         /* Receive packet */
         microtcp_segment_t* packet;
         size_t stream_len = sizeof(microtcp_segment_t) + socket->curr_win_size;
@@ -355,17 +353,23 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
         recvfrom(socket->sd, bit_stream, stream_len, flags, src, &len);
         extract_microtcp_bitstream(&packet, bit_stream, stream_len);
 
-        printf("2\n");
-
         socket->ack_number = packet->header.seq_number+1;
         free(bit_stream);
+
+        /* Shutdown case */
+        if (packet->header.control & FIN_BIT | ACK_BIT == FIN_BIT | ACK_BIT)
+        {
+
+                return 0;
+        }
+
+        memcpy(buffer, packet->payload, packet->header.data_len);
 
         /* Send ACK packet */
         microtcp_segment_t ack_segment;
         init_microtcp_segment(&ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, 0, NULL);
         create_microtcp_bit_stream_segment(&ack_segment, &bit_stream, &stream_len);
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, src, len);
-        printf("3\n");
         return 0;
 }
 

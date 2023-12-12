@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -50,10 +51,18 @@ main(int argc, char **argv)
     servaddr.sin_port = htons(PORT);
     servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    tcpsocket.state = LISTEN;
-
     printf("Attemting to connect...\n");
     microtcp_connect(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
     printf("Connected\n");
+
+    char buff[1024];
+
+    do
+    {
+        printf("To server: ");
+        fgets(buff, 1024, stdin);
+        microtcp_send(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
+    } while (strcmp(buff, "exit") != 0);
+    
     return EXIT_SUCCESS;
 }
