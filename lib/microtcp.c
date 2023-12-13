@@ -289,19 +289,70 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
                 fprintf(stderr, "Error: microtcp_shutdown() failed, socket state was not ESTABLISHED.\n");
                 return -1;
         }
+        if (socket->cliaddr != NULL)
+        {
+                fprintf(stderr, "Error: microtcp_shutdown() failed, shutdown cannot be called by the server.\n");
+                return -1;
+        }
 
         switch (how)
         {
+                /* Block both */
+                default:
+                        microtcp_segment_t sent_fin_ack_segment;
+                        size_t stream_len;
+                        void* bit_stream;
+                        int len;
+                        init_microtcp_segment(&sent_fin_ack_segment, socket->seq_number, socket->ack_number, FIN_BIT | ACK_BIT, socket->curr_win_size, 0, NULL);
+                        create_microtcp_bit_stream_segment(&sent_fin_ack_segment, &bit_stream, &stream_len);
+                        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->servaddr, sizeof(struct sockaddr));
+
+                        len = sizeof(microtcp_segment_t);
+                        microtcp_segment_t* recv_ack_segment;
+                        stream_len = sizeof(microtcp_segment_t);
+                        bit_stream = malloc(stream_len);
+                        recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->servaddr, &len);
+                        extract_microtcp_bitstream(&recv_ack_segment, bit_stream, stream_len);
+                        if ((recv_ack_segment->header.control & ACK_BIT) != ACK_BIT || recv_ack_segment->header.ack_number != socket->seq_number+1)
+                        {
+                                fprintf(stderr, "Error: microtcp_shutdown() failed, received ACK segment was invalid.\n");
+                                return -1;
+                        }
+
+                        socket->state = CLOSING_BY_HOST;
+
+                        len = sizeof(microtcp_segment_t);
+                        microtcp_segment_t* recv_fin_ack_segment;
+                        recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->servaddr, &len);
+                        extract_microtcp_bitstream(&recv_fin_ack_segment, bit_stream, stream_len);
+                        if ((recv_fin_ack_segment->header.control & (FIN_BIT | ACK_BIT)) != (FIN_BIT | ACK_BIT))
+                        {
+                                fprintf(stderr, "Error: microtcp_shutdown() failed, received FIN ACK segment was invalid.\n");
+                                return -1;
+                        }
+
+                        socket->seq_number += 1;
+                        socket->ack_number = recv_fin_ack_segment->header.seq_number+1;
+
+                        microtcp_segment_t sent_ack_segment;
+                        init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, 0, NULL);
+                        create_microtcp_bit_stream_segment(&sent_ack_segment, &bit_stream, &stream_len);
+                        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->servaddr, sizeof(struct sockaddr));
+                        
+                        socket->state = CLOSED;
+
+                        free(socket->servaddr);
+                        socket->servaddr = NULL;
+
+                        break;
+
+                /* TODO: Phase B (probably?) */       
                 /* Block recv */
                 case SHUT_RD:
                         break;
 
                 /* Block send */
                 case SHUT_WR:
-                        break;
-
-                /* Block both */
-                default:
                         break;
         }
 
@@ -374,7 +425,7 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
         void* bit_stream = malloc(stream_len);
 
         struct sockaddr* src = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
-        socklen_t len = sizeof(src);
+        int len = sizeof(src);
         recvfrom(socket->sd, bit_stream, stream_len, flags, src, &len);
         extract_microtcp_bitstream(&packet, bit_stream, stream_len);
 
@@ -385,6 +436,46 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
         if (socket->cliaddr != NULL && (packet->header.control & (FIN_BIT | ACK_BIT)) == (FIN_BIT | ACK_BIT))
         {
                 printf("Shutdown case\n");
+                microtcp_segment_t sent_ack_segment;
+                void* bit_stream;
+                size_t stream_len;
+                init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, 0, NULL);
+                create_microtcp_bit_stream_segment(&sent_ack_segment, &bit_stream, &stream_len);
+                sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, sizeof(struct sockaddr));
+
+                socket->state = CLOSING_BY_PEER;
+                printf("Shutdown case 1\n");
+
+                microtcp_segment_t sent_fin_ack_segment;
+                init_microtcp_segment(&sent_fin_ack_segment, socket->seq_number, socket->ack_number, FIN_BIT | ACK_BIT, socket->curr_win_size, 0, NULL);
+                create_microtcp_bit_stream_segment(&sent_fin_ack_segment, &bit_stream, &stream_len);
+                sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, sizeof(struct sockaddr));
+
+                socket->seq_number += 1;
+
+                len = sizeof(microtcp_segment_t);
+                microtcp_segment_t* recv_ack_segment;
+                stream_len = sizeof(microtcp_segment_t);
+                bit_stream = malloc(stream_len);
+                recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, &len);
+                extract_microtcp_bitstream(&recv_ack_segment, bit_stream, stream_len);
+                if ((recv_ack_segment->header.control & ACK_BIT) != ACK_BIT)
+                {
+                        fprintf(stderr, "Error: microtcp_recv() failed, shutdown ACK bit was not valid.\n");
+                        return -1;
+                }
+
+                printf("Shutdown case 2\n");
+                socket->state = CLOSED;
+
+                free(socket->cliaddr);
+                socket->cliaddr = NULL;
+
+                free(socket->servaddr);
+                socket->servaddr = NULL;
+                
+                free(bit_stream);
+                printf("Shutdown case 3\n");
                 return 0;
         }
 

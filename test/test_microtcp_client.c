@@ -64,6 +64,8 @@ main(int argc, char **argv)
         microtcp_recv(&tcpsocket, rbuff, 1024, NO_FLAGS_BITS);
         printf("From server: %s\n", rbuff);
     } while (strcmp(sbuff, "exit\n") != 0);
+
+    microtcp_shutdown(&tcpsocket, SHUT_RDWR);
     
     return EXIT_SUCCESS;
 }

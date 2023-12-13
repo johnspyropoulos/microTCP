@@ -67,7 +67,7 @@ main(int argc, char **argv)
         microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
         printf("From client: %s", buff);
         microtcp_send(&tcpsocket, rmsg, 17, NO_FLAGS_BITS);
-    } while (strcmp(buff, "exit\n") != 0);
+    } while (tcpsocket.cliaddr != NULL);
 
     return EXIT_SUCCESS;
 }
