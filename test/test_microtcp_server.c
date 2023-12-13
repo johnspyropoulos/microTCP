@@ -59,12 +59,15 @@ main(int argc, char **argv)
     microtcp_accept(&tcpsocket, (struct sockaddr*) &clientaddr, sizeof(clientaddr));
     printf("Connected\n");
 
+    const char* rmsg = "Message received";
+
     char buff[1024] = {0};
     do
     {
         microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
         printf("From client: %s", buff);
-    } while (strcmp(buff, "exit") != 0);
+        microtcp_send(&tcpsocket, rmsg, 17, NO_FLAGS_BITS);
+    } while (strcmp(buff, "exit\n") != 0);
 
     return EXIT_SUCCESS;
 }

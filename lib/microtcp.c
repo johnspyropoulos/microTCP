@@ -279,7 +279,33 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
 
 int microtcp_shutdown(microtcp_sock_t *socket, int how)
 {
-        /* Your code here */
+        if (socket == NULL)
+        {
+                fprintf(stderr, "Error: microtcp_shutdown() failed, socket was NULL.\n");
+                return -1;
+        }
+        if (socket->state != ESTABLISHED)
+        {
+                fprintf(stderr, "Error: microtcp_shutdown() failed, socket state was not ESTABLISHED.\n");
+                return -1;
+        }
+
+        switch (how)
+        {
+                /* Block recv */
+                case SHUT_RD:
+                        break;
+
+                /* Block send */
+                case SHUT_WR:
+                        break;
+
+                /* Block both */
+                default:
+                        break;
+        }
+
+        return 0;
 }
 
 ssize_t
@@ -289,7 +315,7 @@ microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
         if (socket == NULL)
         {
                 fprintf(stderr, "Error: microtcp_send() failed, socket was NULL.\n");
-                return 1;
+                return -1;
         }
         if (socket->state != ESTABLISHED)
         {
@@ -309,7 +335,6 @@ microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length,
 
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
-        
 
         /* Receive ACK packet */
         stream_len = sizeof(microtcp_segment_t);
@@ -357,9 +382,9 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
         free(bit_stream);
 
         /* Shutdown case */
-        if (packet->header.control & FIN_BIT | ACK_BIT == FIN_BIT | ACK_BIT)
+        if (socket->cliaddr != NULL && (packet->header.control & (FIN_BIT | ACK_BIT)) == (FIN_BIT | ACK_BIT))
         {
-
+                printf("Shutdown case\n");
                 return 0;
         }
 

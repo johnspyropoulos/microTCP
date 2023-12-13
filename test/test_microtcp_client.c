@@ -26,7 +26,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -55,14 +54,16 @@ main(int argc, char **argv)
     microtcp_connect(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
     printf("Connected\n");
 
-    char buff[1024];
-
+    char sbuff[1024];
+    char rbuff[1024];
     do
     {
         printf("To server: ");
-        fgets(buff, 1024, stdin);
-        microtcp_send(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
-    } while (strcmp(buff, "exit") != 0);
+        fgets(sbuff, 1024, stdin);
+        microtcp_send(&tcpsocket, sbuff, 1024, NO_FLAGS_BITS);
+        microtcp_recv(&tcpsocket, rbuff, 1024, NO_FLAGS_BITS);
+        printf("From server: %s\n", rbuff);
+    } while (strcmp(sbuff, "exit\n") != 0);
     
     return EXIT_SUCCESS;
 }
