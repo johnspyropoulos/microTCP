@@ -18,6 +18,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * CS335 - Project Phase A
+ * 
+ * Ioannis Spyropoulos - csd5072
+ * Georgios Evangelinos - csd4624
+ * Niki Psoma - csd5038
+*/
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>

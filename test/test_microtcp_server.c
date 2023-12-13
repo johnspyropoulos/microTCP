@@ -23,6 +23,14 @@
  * This file is already inserted at the build system.
  */
 
+/**
+ * CS335 - Project Phase A
+ * 
+ * Ioannis Spyropoulos - csd5072
+ * Georgios Evangelinos - csd4624
+ * Niki Psoma - csd5038
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
