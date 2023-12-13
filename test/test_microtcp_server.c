@@ -65,9 +65,14 @@ main(int argc, char **argv)
     do
     {
         microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
-        printf("From client: %s", buff);
-        microtcp_send(&tcpsocket, rmsg, 17, NO_FLAGS_BITS);
+        if (tcpsocket.state == ESTABLISHED)
+        {
+            printf("From client: %s", buff);
+            microtcp_send(&tcpsocket, rmsg, 17, NO_FLAGS_BITS);
+        }
     } while (tcpsocket.cliaddr != NULL);
+
+    printf("Connection closed by peer\n");
 
     return EXIT_SUCCESS;
 }

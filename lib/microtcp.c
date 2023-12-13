@@ -210,6 +210,8 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
         socket->servaddr = malloc(address_len);
         memcpy(socket->servaddr, address, address_len);
 
+        socket->recvbuf = malloc(MICROTCP_RECVBUF_LEN);
+
         socket->state = ESTABLISHED;
         return 0;
 }
@@ -269,6 +271,8 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
 
         socket->cliaddr = malloc(address_len);
         memcpy(socket->cliaddr, address, address_len);
+
+        socket->recvbuf = malloc(MICROTCP_RECVBUF_LEN);
 
         socket->state = ESTABLISHED;
 
@@ -343,6 +347,9 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
 
                         free(socket->servaddr);
                         socket->servaddr = NULL;
+
+                        free(socket->recvbuf);
+                        socket->recvbuf = NULL;
 
                         break;
 
@@ -435,7 +442,6 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
         /* Shutdown case */
         if (socket->cliaddr != NULL && (packet->header.control & (FIN_BIT | ACK_BIT)) == (FIN_BIT | ACK_BIT))
         {
-                printf("Shutdown case\n");
                 microtcp_segment_t sent_ack_segment;
                 void* bit_stream;
                 size_t stream_len;
@@ -444,7 +450,6 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
                 sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, sizeof(struct sockaddr));
 
                 socket->state = CLOSING_BY_PEER;
-                printf("Shutdown case 1\n");
 
                 microtcp_segment_t sent_fin_ack_segment;
                 init_microtcp_segment(&sent_fin_ack_segment, socket->seq_number, socket->ack_number, FIN_BIT | ACK_BIT, socket->curr_win_size, 0, NULL);
@@ -465,7 +470,6 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
                         return -1;
                 }
 
-                printf("Shutdown case 2\n");
                 socket->state = CLOSED;
 
                 free(socket->cliaddr);
@@ -473,13 +477,16 @@ microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 
                 free(socket->servaddr);
                 socket->servaddr = NULL;
+
+                free(socket->recvbuf);
+                socket->recvbuf = NULL;
                 
                 free(bit_stream);
-                printf("Shutdown case 3\n");
                 return 0;
         }
 
-        memcpy(buffer, packet->payload, packet->header.data_len);
+        memcpy(socket->recvbuf, packet->payload, packet->header.data_len);
+        memcpy(buffer, socket->recvbuf, length);
 
         /* Send ACK packet */
         microtcp_segment_t ack_segment;

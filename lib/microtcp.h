@@ -57,7 +57,7 @@ typedef enum
         ESTABLISHED, /* After accept() the connection is established. */
         CLOSING_BY_PEER,
         CLOSING_BY_HOST,
-        CLOSED,
+        CLOSED, 
         INVALID
 } mircotcp_state_t;
 
