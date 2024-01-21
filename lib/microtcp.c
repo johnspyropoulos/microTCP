@@ -557,6 +557,8 @@ static void server_shutdown(microtcp_sock_t* socket) {
         void* bit_stream;
         size_t stream_len;
         int payload_size = 0;
+        
+        socket->seq_number += payload_size+1;
 
         init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, payload_size, NULL);
         create_microtcp_bit_stream_segment(&sent_ack_segment, &bit_stream, &stream_len);
