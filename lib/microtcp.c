@@ -149,13 +149,14 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
         microtcp_segment_t ack_segment;
         void *bit_stream = NULL;
         size_t stream_len = sizeof(microtcp_header_t); /* No payload. */
+        int payload_size = 0;
 
         /* Initialize header of segment: */
         srand(time(NULL));
         socket->seq_number = rand() | 0b1;
         socket->ack_number = 0;
 
-        init_microtcp_segment(&syn_segment, socket->seq_number, socket->ack_number, SYN_BIT, socket->init_win_size, 0, NULL);
+        init_microtcp_segment(&syn_segment, socket->seq_number, socket->ack_number, SYN_BIT, socket->init_win_size, payload_size, NULL);
         /* data_len is set to zero as we dont sent any payload in SYN phase. */
         /* Function microtcp_connect() is called in SYN phase
          * of the connection. Thus there is no payload. All of
@@ -193,12 +194,13 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                 free(bit_stream);
                 return -1;
         }
-
-        socket->seq_number = syn_segment.header.data_len+1;
+        
+        payload_size = 0;
+        socket->seq_number += payload_size + 1;
         socket->ack_number = syn_ack_segment->header.seq_number+1;
 
         /* Send ACK packet. */
-        init_microtcp_segment(&ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->init_win_size, 0, NULL);
+        init_microtcp_segment(&ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->init_win_size, payload_size, NULL);
         create_microtcp_bit_stream_segment(&ack_segment, &bit_stream, &stream_len);
         if (bit_stream == NULL || stream_len == 0)
         {
@@ -554,18 +556,20 @@ static void server_shutdown(microtcp_sock_t* socket) {
         microtcp_segment_t sent_ack_segment;
         void* bit_stream;
         size_t stream_len;
-        init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, 0, NULL);
+        int payload_size = 0;
+
+        init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, ACK_BIT, socket->curr_win_size, payload_size, NULL);
         create_microtcp_bit_stream_segment(&sent_ack_segment, &bit_stream, &stream_len);
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, sizeof(struct sockaddr));
 
         socket->state = CLOSING_BY_PEER;
 
+        socket->seq_number += payload_size+1;
+
         microtcp_segment_t sent_fin_ack_segment;
-        init_microtcp_segment(&sent_fin_ack_segment, socket->seq_number, socket->ack_number, FIN_BIT | ACK_BIT, socket->curr_win_size, 0, NULL);
+        init_microtcp_segment(&sent_fin_ack_segment, socket->seq_number, socket->ack_number, FIN_BIT | ACK_BIT, socket->curr_win_size, payload_size, NULL);
         create_microtcp_bit_stream_segment(&sent_fin_ack_segment, &bit_stream, &stream_len);
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, sizeof(struct sockaddr));
-
-        socket->seq_number = sent_ack_segment.header.data_len+1;
 
         int len = sizeof(microtcp_segment_t);
         microtcp_segment_t* recv_ack_segment;
