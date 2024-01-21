@@ -194,7 +194,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                 return -1;
         }
 
-        socket->seq_number = ack_segment.header.data_len+1;
+        socket->seq_number = syn_segment.header.data_len+1;
         socket->ack_number = syn_ack_segment->header.seq_number+1;
 
         /* Send ACK packet. */
@@ -565,7 +565,7 @@ static void server_shutdown(microtcp_sock_t* socket) {
         create_microtcp_bit_stream_segment(&sent_fin_ack_segment, &bit_stream, &stream_len);
         sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, socket->cliaddr, sizeof(struct sockaddr));
 
-        socket->seq_number += 1;
+        socket->seq_number = sent_ack_segment.header.data_len+1;
 
         int len = sizeof(microtcp_segment_t);
         microtcp_segment_t* recv_ack_segment;
