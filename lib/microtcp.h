@@ -122,6 +122,9 @@ typedef struct
         uint32_t checksum;    /**< CRC-32 checksum, see crc32() in utils folder */
 } microtcp_header_t;
 
+/**
+ * @deprecated
+*/
 typedef struct 
 {
         microtcp_header_t header;
@@ -135,7 +138,7 @@ typedef struct
          * If payload == NULL then no payload. (SYN packets)
          * */
 
-}microtcp_segment_t; /* MicroTCP packet. */
+} microtcp_segment_t; /* MicroTCP packet. */
 
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol);
 
@@ -155,7 +158,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
 int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t address_len);
 
 int microtcp_shutdown(microtcp_sock_t *socket, int how);
-
+                                                                        /* TODO: what the fuck is this */
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags);
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags);
