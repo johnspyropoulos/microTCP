@@ -25,12 +25,12 @@ enum MICROTCP_ERRNO
     SENDING_FAILED
 };
 
-enum MICROTCP_ERRNO LOCAL_ERRNO = ALL_GOOD;
+enum MICROTCP_ERRNO MICRO_ERRNO = ALL_GOOD;
 
 static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_name_, int line_)
 {
     const char *error_message;
-    LOCAL_ERRNO = errno_;
+    MICRO_ERRNO = errno_;
 
     switch (errno_)
     {
