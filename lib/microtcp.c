@@ -28,11 +28,14 @@
 
 #include "microtcp.h"
 #include "../utils/crc32.h"
+#include "microtcp_errno.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+
+#define microtcp_set_errno(errno_) microtcp_set_errno(errno_, __func__, __LINE__)
 
 /* Start of declarations of inner working (helper) functions: */
 
@@ -53,15 +56,23 @@ static inline void init_microtcp_segment(microtcp_segment_t *const __segment, ui
 static void extract_microtcp_bitstream(microtcp_segment_t **__segment, void *__bit_stream, const size_t __stream_len);
 
 /**
- * @brief Creates a TCP bitstream, containing a header and (optionally) payload
- * @param socket 
- * @param control
- * @param payload
- * @param payload_len
- * @param stream_len
- * @returns
+ * @brief Creates a MicroTCP bitstream, containing a header and (optionally) payload
+ * @param socket MicroTCP socket
+ * @param control control bits
+ * @param payload payload, set NULL if no payload
+ * @param payload_len payload size in bytes
+ * @param stream_len is set to the size of the bitstream after successful creation
+ * @returns the created bitstream
 */
 static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t control, const void* const payload, size_t payload_len, size_t* stream_len);
+
+/**
+ * @brief Extracts a MicroTCP bitstream, returning the packet's header and saving its payload in the socket receive buffer
+ * @param socket MicroTCP socket
+ * @param bitstream bitstream to extract
+ * @returns packet header
+*/
+static microtcp_header_t extract_bitstream(const microtcp_sock_t* const socket, const void* const bitstream);
 
 static void server_shutdown(microtcp_sock_t* socket);
 
@@ -404,8 +415,19 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
         size_t stream_len;
         void* bitstream = create_bitstream(socket, NO_FLAGS_BITS, buffer, length, &stream_len);
 
+        socket->seq_number += length;
+
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
         sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
+        
+        socklen_t len = sizeof(*dest);
+        recvfrom(socket->sd, bitstream, sizeof(microtcp_header_t), NO_FLAGS_BITS, dest, len);
+        microtcp_header_t ack_packet = extract_bitstream(socket, bitstream);
+        if (!(ack_packet.control & ACK_BIT != ACK_BIT) || (ack_packet.ack_number != socket->seq_number+1))
+        {
+                microtcp_set_errno(ACK_NUMBER_MISMATCH);
+                return -1;
+        }
 
         return 0;
 }
@@ -473,6 +495,12 @@ static void create_microtcp_bit_stream_segment(const microtcp_segment_t *const _
 
 static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t control, const void* const payload, size_t payload_len, size_t* stream_len)
 {
+        if (socket == NULL)
+        {
+                microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                return NULL;
+        }
+
         microtcp_header_t header;
         header.seq_number = socket->ack_number;
         header.ack_number = socket->ack_number;
@@ -487,7 +515,7 @@ static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t cont
         void* bitstream = malloc(sizeof(microtcp_header_t) + payload_len);
         if (bitstream == NULL)
         {
-                free(bitstream);
+                microtcp_set_errno(MALLOC_FAILED);
                 return NULL;
         }
 
@@ -501,6 +529,11 @@ static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t cont
 static microtcp_header_t extract_bitstream(const microtcp_sock_t* const socket, const void* const bitstream)
 {
         microtcp_header_t header;
+        if (socket == NULL || bitstream == NULL)
+        {
+                microtcp_set_errno(BITSTREAM_EXTRACTION_FAILED);
+                return header;
+        }
 
         memcpy(&header, bitstream, sizeof(microtcp_header_t));
         memcpy(socket->recvbuf, bitstream + sizeof(microtcp_header_t), header.data_len);
@@ -579,3 +612,5 @@ static void server_shutdown(microtcp_sock_t* socket) {
 }
 
 /* End   of definitions of inner working (helper) functions. */
+
+#undef microtcp_set_errno
