@@ -434,6 +434,25 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
+        void* bitstream;
+        struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
+        socklen_t len = sizeof(*dest);
+
+        recvfrom(socket->sd, bitstream, length, NO_FLAGS_BITS, dest, len);
+        microtcp_header_t packet = extract_bitstream(socket, bitstream);
+
+        socket->ack_number = packet.ack_number+1;
+
+        memcpy(buffer, socket->recvbuf, packet.data_len);
+
+        if (socket->cliaddr != NULL && (packet.control & (FIN_BIT | ACK_BIT)) == (FIN_BIT | ACK_BIT))
+        {
+                return server_shutdown(socket);
+        }
+
+        size_t stream_len;
+        bitstream = create_bitstream(socket, ACK_BIT, NULL, 0, &stream_len);
+
         return 0;
 }
 
@@ -502,7 +521,7 @@ static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t cont
         }
 
         microtcp_header_t header;
-        header.seq_number = socket->ack_number;
+        header.seq_number = socket->seq_number;
         header.ack_number = socket->ack_number;
         header.control = control;
         header.window = socket->curr_win_size;
@@ -564,7 +583,7 @@ static void extract_microtcp_bitstream(microtcp_segment_t **__segment, void *__b
         *__segment = segment;
 }
 
-static void server_shutdown(microtcp_sock_t* socket) {
+static int server_shutdown(microtcp_sock_t* socket) {
         microtcp_segment_t sent_ack_segment;
         void* bit_stream;
         size_t stream_len;
@@ -609,6 +628,7 @@ static void server_shutdown(microtcp_sock_t* socket) {
         socket->recvbuf = NULL;
         
         free(bit_stream);
+        return 0;
 }
 
 /* End   of definitions of inner working (helper) functions. */
