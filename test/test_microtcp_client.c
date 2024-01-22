@@ -67,7 +67,7 @@ main(int argc, char **argv)
     {
         printf("To server: ");
         fgets(sbuff, 1024, stdin);
-        microtcp_send(&tcpsocket, sbuff, 1024, NO_FLAGS_BITS);
+        microtcp_send(&tcpsocket, sbuff, strlen(sbuff), NO_FLAGS_BITS);
         microtcp_recv(&tcpsocket, rbuff, 1024, NO_FLAGS_BITS);
         printf("From server: %s\n", rbuff);
     } while (strcmp(sbuff, "exit\n") != 0);

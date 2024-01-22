@@ -72,7 +72,8 @@ main(int argc, char **argv)
     char buff[1024] = {0};
     do
     {
-        microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
+        int bytes_rec = microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
+        buff[bytes_rec] = '\0';
         if (tcpsocket.state == ESTABLISHED)
         {
             printf("From client: %s", buff);

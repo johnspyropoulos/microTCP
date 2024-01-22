@@ -415,33 +415,44 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
         size_t stream_len;
         void* bitstream = create_bitstream(socket, NO_FLAGS_BITS, buffer, length, &stream_len);
 
-        socket->seq_number += length;
-
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
         sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
-        
+
+        free(bitstream);
+        bitstream = malloc(sizeof(microtcp_header_t));
+        if (bitstream == NULL)
+        {
+                microtcp_set_errno(MALLOC_FAILED);
+                return -1;
+        }
+
         socklen_t len = sizeof(*dest);
-        recvfrom(socket->sd, bitstream, sizeof(microtcp_header_t), NO_FLAGS_BITS, dest, len);
+        recvfrom(socket->sd, bitstream, sizeof(microtcp_header_t), NO_FLAGS_BITS, dest, &len);
         microtcp_header_t ack_packet = extract_bitstream(socket, bitstream);
-        if (!(ack_packet.control & ACK_BIT != ACK_BIT) || (ack_packet.ack_number != socket->seq_number+1))
+        
+        free(bitstream);
+
+        if ((ack_packet.control & ACK_BIT != ACK_BIT) || (ack_packet.ack_number != socket->seq_number+1))
         {
                 microtcp_set_errno(ACK_NUMBER_MISMATCH);
                 return -1;
         }
 
-        return 0;
+        return stream_len - sizeof(microtcp_header_t);
 }
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
-        void* bitstream;
+        void* bitstream = malloc(length);
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
-        socklen_t len = sizeof(*dest);
 
-        recvfrom(socket->sd, bitstream, length, NO_FLAGS_BITS, dest, len);
+        socklen_t len = sizeof(*dest);
+        ssize_t bytes_read = recvfrom(socket->sd, bitstream, length, NO_FLAGS_BITS, dest, &len);
         microtcp_header_t packet = extract_bitstream(socket, bitstream);
 
-        socket->ack_number = packet.ack_number+1;
+        free(bitstream);
+
+        socket->ack_number = packet.seq_number+1;
 
         memcpy(buffer, socket->recvbuf, packet.data_len);
 
@@ -453,8 +464,11 @@ ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int 
         size_t stream_len;
         bitstream = create_bitstream(socket, ACK_BIT, NULL, 0, &stream_len);
         sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
+        free(bitstream);
 
-        return 0;
+        if (bytes_read == -1)
+                return -1;
+        return bytes_read - sizeof(microtcp_header_t);
 }
 
 /* Start of definitions of inner working (helper) functions: */
