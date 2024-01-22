@@ -74,7 +74,7 @@ static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t cont
 */
 static microtcp_header_t extract_bitstream(const microtcp_sock_t* const socket, const void* const bitstream);
 
-static void server_shutdown(microtcp_sock_t* socket);
+static int server_shutdown(microtcp_sock_t* socket);
 
 /* REMOVE BEFORE SUBMISSION. */
 static void print_bitstream(void *stream, size_t length)
@@ -452,6 +452,7 @@ ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int 
 
         size_t stream_len;
         bitstream = create_bitstream(socket, ACK_BIT, NULL, 0, &stream_len);
+        sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
 
         return 0;
 }
