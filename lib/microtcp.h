@@ -38,7 +38,7 @@
  * Several useful constants
  */
 #define MICROTCP_ACK_TIMEOUT_US 200000         /* US = microseconds (letter 'u' is used to specify micro). */
-#define MICROTCP_MSS 1400                      /* Maximum Segment Size (in bytes) of Data/Payload (headers not included). */
+#define MICROTCP_MSS 20                      /* Maximum Segment Size (in bytes) of Data/Payload (headers not included). */
 #define MICROTCP_RECVBUF_LEN 8192              /* 8 KB buffer size. */
 #define MICROTCP_WIN_SIZE MICROTCP_RECVBUF_LEN /* 8KBytes. Seem small for window size. */
 #define MICROTCP_INIT_CWND (3 * MICROTCP_MSS)

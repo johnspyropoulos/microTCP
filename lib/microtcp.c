@@ -410,6 +410,23 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags)
 {
+        if (length > MICROTCP_MSS)
+        {
+                size_t bytes_left = length;
+                while (bytes_left > MICROTCP_MSS)
+                {
+                        socket->seq_number += MICROTCP_MSS;
+                        microtcp_send(socket, buffer, MICROTCP_MSS, flags);
+                        buffer += MICROTCP_MSS;
+                        bytes_left -= MICROTCP_MSS;
+                }
+
+                socket->seq_number += bytes_left;
+                microtcp_send(socket, buffer, bytes_left, flags);
+                
+                return length;
+        }
+
         socket->seq_number += length;
         
         size_t stream_len;
