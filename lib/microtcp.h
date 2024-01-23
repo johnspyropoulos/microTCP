@@ -122,9 +122,6 @@ typedef struct
         uint32_t checksum;    /**< CRC-32 checksum, see crc32() in utils folder */
 } microtcp_header_t;
 
-/**
- * @deprecated
-*/
 typedef struct 
 {
         microtcp_header_t header;

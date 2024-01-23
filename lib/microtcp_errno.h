@@ -8,9 +8,11 @@
 enum MICROTCP_ERRNO
 {
     ALL_GOOD = 0,
-    ERROR = 2,
+
+    ERROR,
 
     /* SPECIFICS */
+    NULL_POINTER_ARGUMENT,
     MALLOC_FAILED,
     SOCKET_STATE_NOT_READY,
     TIMEOUT_SET_FAILED,
@@ -22,7 +24,8 @@ enum MICROTCP_ERRNO
     ACK_PACKET_EXPECTED,
     ACK_NUMBER_MISMATCH,
     HANDSHAKE_FAILED,
-    SENDING_FAILED
+    SENDTO_FAILED,
+    RECVFROM_CORRUPTED
 };
 
 enum MICROTCP_ERRNO MICRO_ERRNO = ALL_GOOD;
@@ -34,6 +37,9 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
 
     switch (errno_)
     {
+    case NULL_POINTER_ARGUMENT:
+        "NULL pointer was given as argument.";
+        break;
     case MALLOC_FAILED:
         error_message = "Memory allocation failed.";
         break;
@@ -64,14 +70,20 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
     case HANDSHAKE_FAILED:
         error_message = "Three-way handshake failed between server and client.";
         break;
-    case SENDING_FAILED:
+    case SENDTO_FAILED:
         error_message = "Sendind bit-stream with UDP::sendto() failed.";
+        break;
+    case RECVFROM_CORRUPTED:
+        error_message = "UDP::recvfrom returned corrupted data.";
+        break;
+    default:
+        error_message = "Unknown microtcp error number (default).";
         break;
     }
 
-    #ifdef DEBUG
+#ifdef DEBUG
     fprintf(stderr, "Error in line %d (%s): %s\n", line_, function_name_, error_message);
-    #endif
+#endif
 }
 
 #endif
