@@ -410,6 +410,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags)
 {
+        /* Break down into segments if payload size exceeds MSS */
         if (length > MICROTCP_MSS)
         {
                 size_t bytes_left = length;
@@ -423,10 +424,11 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 
                 socket->seq_number += bytes_left;
                 microtcp_send(socket, buffer, bytes_left, flags); /* Sends final chunk. */
-                
+
                 return length;
         }
 
+        /* For each packet segment */
         socket->seq_number += length;
         
         size_t stream_len;
@@ -434,49 +436,49 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
         sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
-
         free(bitstream);
-        if (bitstream == NULL)
-        {
-                microtcp_set_errno(MALLOC_FAILED);
-                return -1;
-        }
 
         socklen_t len = sizeof(*dest);
         recvfrom(socket->sd, socket->recvbuf, sizeof(microtcp_header_t), NO_FLAGS_BITS, dest, &len);
         microtcp_segment_t* ack_packet = extract_bitstream(socket->recvbuf);
         
-        if ((ack_packet->header.control & ACK_BIT != ACK_BIT) || (ack_packet->header.seq_number != socket->seq_number+1))
+        if ((ack_packet->header.control & ACK_BIT != ACK_BIT))
         {
-                microtcp_set_errno(ACK_NUMBER_MISMATCH);
+                free(ack_packet->payload);
+                free(ack_packet);
+                microtcp_set_errno(ACK_PACKET_EXPECTED);
                 return -1;
         }
+
+        free(ack_packet->payload);
+        free(ack_packet);
 
         return stream_len - sizeof(microtcp_header_t);
 }
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
-        void* bitstream = malloc(length);
         struct sockaddr* dest = (socket->cliaddr == NULL) ? socket->servaddr : socket->cliaddr;
-
         socklen_t len = sizeof(*dest);
-        ssize_t bytes_read = recvfrom(socket->sd, bitstream, length, NO_FLAGS_BITS, dest, &len);
-        microtcp_header_t packet; /* = extract_bitstream(socket, bitstream);*/
+        ssize_t bytes_read = recvfrom(socket->sd, socket->recvbuf, length, NO_FLAGS_BITS, dest, &len);
+        microtcp_segment_t* packet = extract_bitstream(socket->recvbuf);
 
-        free(bitstream);
+        socket->ack_number = packet->header.seq_number+1;
 
-        socket->ack_number = packet.seq_number+1;
-
-        memcpy(buffer, socket->recvbuf, packet.data_len);
-
-        if (socket->cliaddr != NULL && (packet.control & (FIN_BIT | ACK_BIT)) == (FIN_BIT | ACK_BIT))
+        memcpy(buffer, packet->payload, packet->header.data_len);
+        
+        if (socket->cliaddr != NULL && (packet->header.control & (FIN_BIT | ACK_BIT)) == (FIN_BIT | ACK_BIT))
         {
+                free(packet->payload);
+                free(packet);
                 return server_shutdown(socket);
         }
 
+        free(packet->payload);
+        free(packet);
+
         size_t stream_len;
-        bitstream = create_bitstream(socket, ACK_BIT, NULL, 0, &stream_len);
+        void* bitstream = create_bitstream(socket, ACK_BIT, NULL, 0, &stream_len);
         sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, dest, sizeof(*dest));
         free(bitstream);
 
@@ -577,20 +579,25 @@ static void* create_bitstream(const microtcp_sock_t* const socket, uint16_t cont
 static microtcp_segment_t* extract_bitstream(const void* const bitstream)
 {
         microtcp_segment_t* segment = malloc(sizeof(microtcp_segment_t));
-        if (bitstream == NULL || segment->payload == NULL)
-        {
+        segment->payload = NULL;
+        if (bitstream == NULL || segment == NULL)
+        {       
+                microtcp_set_errno(NULL_POINTER_ARGUMENT);
                 return NULL;
         }
 
         memcpy(&(segment->header), bitstream, sizeof(microtcp_header_t));
-        segment->payload = malloc(segment->header.data_len);
-        if (segment->payload == NULL)
+
+        if (segment->header.data_len > 0)
+                segment->payload = malloc(segment->header.data_len);
+
+        if (segment->payload == NULL && segment->header.data_len > 0)
         {
                 microtcp_set_errno(MALLOC_FAILED);
-                return segment;
+                return NULL;
         }
 
-        memcpy(&(segment->payload), bitstream + sizeof(microtcp_header_t), segment->header.data_len);
+        memcpy(segment->payload, bitstream + sizeof(microtcp_header_t), segment->header.data_len);
 
         return segment;
 }
