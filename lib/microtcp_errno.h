@@ -25,7 +25,8 @@ enum MICROTCP_ERRNO
     ACK_NUMBER_MISMATCH,
     HANDSHAKE_FAILED,
     SENDTO_FAILED,
-    RECVFROM_CORRUPTED
+    RECVFROM_CORRUPTED,
+    CHECKSUM_VALIDATION_FAILED
 };
 
 enum MICROTCP_ERRNO MICRO_ERRNO = ALL_GOOD;
@@ -75,6 +76,9 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
         break;
     case RECVFROM_CORRUPTED:
         error_message = "UDP::recvfrom returned corrupted data.";
+        break;
+    case CHECKSUM_VALIDATION_FAILED:
+        error_message = "Header's checksum does not verify packet's byte sequence.";
         break;
     default:
         error_message = "Unknown microtcp error number (default).";

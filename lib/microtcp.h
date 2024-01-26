@@ -49,6 +49,7 @@
 #define SYN_BIT (0b1 << 14)
 #define FIN_BIT (0b1 << 15)
 
+#define INITIAL_CHECKSUM_VALUE 0
 #define NO_FLAGS_BITS 0
 
 /**

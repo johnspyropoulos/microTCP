@@ -73,7 +73,7 @@ static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t cont
  * @param bitstream bitstream to extract
  * @returns packet header
  */
-static microtcp_segment_t *extract_bitstream(const void *const bitstream);
+static microtcp_segment_t *extract_bitstream(void *const bitstream);
 
 static int server_shutdown(microtcp_sock_t *socket);
 
@@ -120,6 +120,7 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
 
         micro_sock.buf_fill_level = 0;
         micro_sock.ssthresh = MICROTCP_INIT_SSTHRESH;
+        srand(time(NULL));
         micro_sock.seq_number = rand() | 0b1; /* Random number not zero. */
         micro_sock.ack_number = 0;            /* Undefined. */
         micro_sock.packets_send = 0;
@@ -133,6 +134,11 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
         micro_sock.cliaddr = NULL;
 
         /* Set blocking time for receive at 0.2 seconds. */
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = MICROTCP_ACK_TIMEOUT_US;
+        if (setsockopt(micro_sock.sd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval)) < 0)
+                microtcp_set_errno(TIMEOUT_SET_FAILED);
 
         return micro_sock;
 }
@@ -165,20 +171,9 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address, sockl
         return bind_ret_val;
 }
 
-/* PHASE B TODO: compartmentalize functions even further.
- *Inner loops will be need for packet loss management.
- * */
 /** @return Upon successful completion, connect() shall return 0; otherwise, -1 . */
 int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, socklen_t address_len)
 {
-        struct timeval timeout;
-        timeout.tv_sec = 0;
-        timeout.tv_usec = MICROTCP_ACK_TIMEOUT_US;
-        if (setsockopt(socket->sd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval)) < 0)
-        {
-                microtcp_set_errno(TIMEOUT_SET_FAILED);
-                return -1;
-        }
         if (socket == NULL || socket->state != READY)
         {
                 microtcp_set_errno(socket == NULL ? NULL_POINTER_ARGUMENT : SOCKET_STATE_NOT_READY);
@@ -197,46 +192,56 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                 microtcp_set_errno(BITSTREAM_CREATION_FAILED);
                 return -1;
         }
-        do
+        while (true)
         {
                 ssize_t syn_ret_val = sendto(socket->sd, bitstream_send, stream_len, NO_FLAGS_BITS, address, address_len);
                 if (syn_ret_val < 0)
                 {
                         microtcp_set_errno(SENDTO_FAILED);
-                        socket->bytes_lost += stream_len;
                         free(bitstream_send);
                         return -1;
                 }
+                socket->packets_send++;
 
                 /* Receive ACK-SYN packet. */
                 ssize_t ack_syn_ret_val = recvfrom(socket->sd, socket->recvbuf, stream_len, NO_FLAGS_BITS, (struct sockaddr *)address, &address_len);
                 if (ack_syn_ret_val < 0)
-                        continue; /* Nothing in receive buffers yet. */ /*TODO maybe add counters.*/
-                else if ((size_t)ack_syn_ret_val < sizeof(microtcp_header_t))
+                {
+                        socket->packets_lost++;
+                        /* We resend the packet, as, there was no response in the
+                        previous sending. Thus the previous packet is considered lost. */
+                        continue; /* Nothing in receive buffers yet. */
+                }
+                socket->packets_received++;                              /* We got somesort of a packet. */
+                if ((size_t)ack_syn_ret_val < sizeof(microtcp_header_t)) /* Possible corrupted UDP packet. */
                 {
                         microtcp_set_errno(RECVFROM_CORRUPTED);
                         socket->packets_lost++;
-                        socket->bytes_lost += (ack_syn_ret_val > 0) ? ack_syn_ret_val : 0;
                         continue;
                 }
-                microtcp_segment_t *received_segment = extract_bitstream(socket->recvbuf);
 
-                if (received_segment == NULL ||
-                    received_segment->header.ack_number != socket->seq_number + 1 ||
-                    (received_segment->header.control & (SYN_BIT | ACK_BIT)) != (SYN_BIT | ACK_BIT))
-                    {
-                        if (received_segment == NULL)
-                                microtcp_set_errno(BITSTREAM_EXTRACTION_FAILED);
-                        else if (received_segment->header.ack_number != socket->seq_number + 1)
+                microtcp_segment_t *received_segment = extract_bitstream(socket->recvbuf);
+                if (received_segment == NULL)
+                {
+                        microtcp_set_errno(BITSTREAM_EXTRACTION_FAILED);
+                        free(bitstream_send);
+                        return -1;
+                }
+                if (received_segment->header.ack_number != socket->seq_number + 1 ||
+                    ((received_segment->header.control & (SYN_BIT | ACK_BIT)) != (SYN_BIT | ACK_BIT)))
+                {
+                        if (received_segment->header.ack_number != socket->seq_number + 1)
                                 microtcp_set_errno(ACK_NUMBER_MISMATCH);
                         else
                                 microtcp_set_errno(ACK_SYN_PACKET_EXPECTED);
+                        free(received_segment);
+                        socket->packets_lost++;
                         continue;
-                    }
-
+                }
                 socket->ack_number = received_segment->header.seq_number + 1;
+                free(received_segment);
                 break;
-        } while (true);
+        }
 
         /* Send ACK packet. */
         free(bitstream_send);
@@ -247,15 +252,17 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                 microtcp_set_errno(BITSTREAM_CREATION_FAILED);
                 return -1;
         }
-        ssize_t ack_ret_val = sendto(socket->sd, bitstream_send, stream_len, NO_FLAGS_BITS, address, address_len);
-        if (ack_ret_val < 0)
+        ssize_t ack_ret_val = sendto(socket->sd, bitstream_send, stream_len, NO_FLAGS_BITS, (struct sockaddr *)address, address_len);
+        socket->servaddr = malloc(address_len);
+        if (ack_ret_val < 0 || socket->servaddr == NULL)
         {
-                microtcp_set_errno(SENDTO_FAILED);
-                socket->bytes_lost += stream_len;
+                microtcp_set_errno(ack_ret_val < 0 ? SENDTO_FAILED : MALLOC_FAILED);
                 free(bitstream_send);
                 return -1;
         }
-
+        free(bitstream_send);
+        memcpy(socket->servaddr, address, address_len);
+        socket->packets_send++;
         socket->state = ESTABLISHED;
         return 0;
 }
@@ -264,64 +271,103 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
 {
         if (socket == NULL || socket->state != LISTEN)
         {
-                if (socket == NULL)
-                        fprintf(stderr, "Error: microtcp_accept() failed, socket address was NULL.\n");
-                else
-                        fprintf(stderr, "Error: microtcp_accept() failed, as given socket was not in LISTEN state.\n");
+                microtcp_set_errno(socket == NULL ? NULL_POINTER_ARGUMENT : SOCKET_STATE_NOT_READY);
                 return -1;
         }
-
-        microtcp_segment_t *recv_syn_segment;
-        microtcp_segment_t sent_ack_segment;
         size_t stream_len = sizeof(microtcp_header_t);
-        void *bit_stream = malloc(stream_len);
-
-        int ret_val;
-        ret_val = recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, &address_len);
-        extract_microtcp_bitstream(&recv_syn_segment, bit_stream, stream_len);
-        if (recv_syn_segment->header.control != SYN_BIT)
+        while (true)
         {
-                fprintf(stderr, "Error: microtcp_accept() failed, SYN segment was invalid\n");
-                free(bit_stream);
+                /* Receive request for connection. SYN FLAG BIT. */
+                ssize_t syn_ret_val = recvfrom(socket->sd, socket->recvbuf, stream_len, NO_FLAGS_BITS, address, &address_len);
+                if (syn_ret_val < 0)
+                        continue;
+                socket->packets_received++;
+                if ((size_t)syn_ret_val < sizeof(microtcp_header_t)) /* Corrupted UDP packet. */
+                {
+                        microtcp_set_errno(RECVFROM_CORRUPTED);
+                        continue;
+                }
+                microtcp_segment_t *syn_segment = extract_bitstream(socket->recvbuf);
+                if (syn_segment == NULL)
+                {
+                        microtcp_set_errno(BITSTREAM_EXTRACTION_FAILED);
+                        return -1;
+                }
+                if (syn_segment->header.control != SYN_BIT) /* Not a SYN packet. */
+                {
+                        microtcp_set_errno(SYN_PACKET_EXPECTED);
+                        free(syn_segment);
+                        continue;
+                }
+                /* Got a packet requesting a connection. */
+                socket->ack_number = syn_segment->header.seq_number + 1;
+                free(syn_segment);
+                break;
+        }
+        /* Sent ACK-SYN packet. */
+        void *payload = NULL;
+        size_t payload_size = 0;
+        socket->seq_number += payload_size + 1;
+        void *bitstream_send = create_bitstream(socket, ACK_BIT | SYN_BIT, payload, payload_size, &stream_len);
+        if (bitstream_send == NULL)
+        {
+                microtcp_set_errno(BITSTREAM_CREATION_FAILED);
                 return -1;
         }
-        socket->ack_number = recv_syn_segment->header.seq_number + 1;
-        printf("ACCEPT SYN (received) packet seq_number == %d\n", recv_syn_segment->header.seq_number);
-        printf("ACCEPT ACK-SYN packet ack_number == %d\n", socket->ack_number);
-
-        init_microtcp_segment(&sent_ack_segment, socket->seq_number, socket->ack_number, SYN_BIT | ACK_BIT, socket->init_win_size, 0, NULL);
-        create_microtcp_bit_stream_segment(&sent_ack_segment, &bit_stream, &stream_len);
-        if (bit_stream == NULL || stream_len == 0)
+        while (true)
         {
-                fprintf(stderr, "Error: microtcp_accept() failed, bit-stream conversion failed.\n");
-                return -1;
+                ssize_t ack_syn_ret_val = sendto(socket->sd, bitstream_send, stream_len, NO_FLAGS_BITS, address, address_len);
+                if (ack_syn_ret_val < 0)
+                {
+                        microtcp_set_errno(SENDTO_FAILED);
+                        free(bitstream_send);
+                        return -1;
+                }
+                socket->packets_send++;
+                ssize_t ack_ret_val = recvfrom(socket->sd, socket->recvbuf, stream_len, NO_FLAGS_BITS, address, &address_len);
+                if (ack_ret_val < 0) /* No repsonse yet. */
+                {
+                        socket->packets_lost++;
+                        /* We resend the packet, as, there was no response in the
+                        previous sending. Thus the previous packet is considered lost. */
+                        continue; /* Nothing in receive buffers yet. */
+                }
+                socket->packets_received++;
+                if ((size_t)ack_ret_val < sizeof(microtcp_header_t)) /* Possibly corrupted UDP packet. */
+                {
+                        microtcp_set_errno(RECVFROM_CORRUPTED);
+                        continue;
+                }
+                microtcp_segment_t *ack_segment = extract_bitstream(socket->recvbuf);
+                if (ack_segment == NULL)
+                {
+                        microtcp_set_errno(BITSTREAM_EXTRACTION_FAILED);
+                        free(bitstream_send);
+                        return -1;
+                }
+
+                if (ack_segment->header.control != ACK_BIT ||
+                    ack_segment->header.ack_number != socket->seq_number + 1)
+                {
+                        microtcp_set_errno((ack_segment->header.control != ACK_BIT) ? ACK_PACKET_EXPECTED : ACK_NUMBER_MISMATCH);
+                        free(ack_segment);
+                        continue;
+                }
+                socket->ack_number = ack_segment->header.seq_number + 1;
+                free(ack_segment);
+                break;
         }
-
-        sendto(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, address_len);
-
-        microtcp_segment_t *recv_ack_segment;
-        stream_len = sizeof(microtcp_segment_t);
-        recvfrom(socket->sd, bit_stream, stream_len, NO_FLAGS_BITS, address, &address_len);
-        extract_microtcp_bitstream(&recv_ack_segment, bit_stream, stream_len);
-        if ((sent_ack_segment.header.control & ACK_BIT) != ACK_BIT || recv_ack_segment->header.ack_number != sent_ack_segment.header.seq_number + 1)
-        {
-                fprintf(stderr, "Error: microtcp_accept() failed, ACK segment was invalid.\n");
-                free(bit_stream);
-                return -1;
-        }
-
-        // TODO: ASK TA: Is this correct? (Undefined). socket->seq_number += 1;
-        socket->ack_number = recv_ack_segment->header.seq_number + 1;
-
         socket->cliaddr = malloc(address_len);
+        if (socket->cliaddr == NULL)
+        {
+                microtcp_set_errno(MALLOC_FAILED);
+                free(bitstream_send);
+                return -1;
+        }
+        /* What about the other participant????? */
+        free(bitstream_send);
         memcpy(socket->cliaddr, address, address_len);
-
-        socket->recvbuf = malloc(MICROTCP_RECVBUF_LEN);
-
         socket->state = ESTABLISHED;
-
-        free(bit_stream);
-
         return 0;
 }
 
@@ -558,10 +604,10 @@ static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t cont
         header.control = control;
         header.window = socket->curr_win_size;
         header.data_len = payload_len;
-        /* init_segment.header.future_use0 = NYI */
-        /* init_segment.header.future_use1 = NYI */
-        /* init_segment.header.future_use2 = NYI */
-        /* init_segment.header.checksum = NYI */
+        header.future_use0 = 0;
+        header.future_use1 = 0;
+        header.future_use2 = 0;
+        header.checksum = INITIAL_CHECKSUM_VALUE;
 
         void *bitstream = malloc(sizeof(microtcp_header_t) + payload_len);
         if (bitstream == NULL)
@@ -574,16 +620,36 @@ static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t cont
         memcpy(bitstream + sizeof(microtcp_header_t), payload, payload_len);
 
         *stream_len = sizeof(microtcp_header_t) + payload_len;
+
+        ((microtcp_header_t *)bitstream)->checksum = crc32(bitstream, *stream_len);
+        printf("create_checksum == %u\n", ((microtcp_header_t *)bitstream)->checksum);
         return bitstream;
 }
 
-static microtcp_segment_t *extract_bitstream(const void *const bitstream)
+static microtcp_segment_t *extract_bitstream(void *const bitstream)
 {
+
+        uint32_t *bitstream_checksum = &(((microtcp_header_t *)bitstream)->checksum);
+        size_t bitstream_size = sizeof(microtcp_header_t) + ((microtcp_header_t *)bitstream)->data_len;
+
+        uint32_t included_checksum_value = *bitstream_checksum;
+        *bitstream_checksum = INITIAL_CHECKSUM_VALUE;
+        uint32_t calculated_checksum_value = crc32(bitstream, bitstream_size);
+        *bitstream_checksum = included_checksum_value;
+        printf("included value == %u\n", included_checksum_value);
+        printf("calculated value == %u\n", calculated_checksum_value);
+
+        if (included_checksum_value != calculated_checksum_value)
+        {
+                microtcp_set_errno(CHECKSUM_VALIDATION_FAILED);
+                return NULL;
+        }
+
         microtcp_segment_t *segment = malloc(sizeof(microtcp_segment_t));
         segment->payload = NULL;
         if (bitstream == NULL || segment == NULL)
         {
-                microtcp_set_errno(NULL_POINTER_ARGUMENT);
+                microtcp_set_errno(bitstream == NULL ? NULL_POINTER_ARGUMENT : MALLOC_FAILED);
                 return NULL;
         }
 
