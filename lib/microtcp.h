@@ -87,9 +87,10 @@ typedef struct
                                      connection. It is allocated during the connection establishment and
                                      is freed at the shutdown of the connection. This buffer is used
                                      to retrieve the data from the network. */
+
         size_t buf_fill_level;  /**< Amount of data in the buffer */
 
-        size_t cwnd;
+        size_t cwnd;            /* Bytes that can be sent before receiving an ACK. */
         size_t ssthresh;
 
         size_t seq_number; /**< Keep the state of the sequence number */ 
@@ -101,8 +102,9 @@ typedef struct
         uint64_t bytes_received;
         uint64_t bytes_lost;
 
-        struct sockaddr* servaddr;
-        struct sockaddr* cliaddr;
+        struct sockaddr* servaddr;  /* CSD5072 */
+        struct sockaddr* opposite_end_host; /* CSD4624: Never mallocED, just a reference. */
+        struct sockaddr* cliaddr;  /* CSD5072 */
 } microtcp_sock_t;
 
 /*

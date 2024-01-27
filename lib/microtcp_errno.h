@@ -15,6 +15,7 @@ enum MICROTCP_ERRNO
     NULL_POINTER_ARGUMENT,
     MALLOC_FAILED,
     SOCKET_STATE_NOT_READY,
+    SOCKET_STATE_NOT_ESTABLISHED,
     TIMEOUT_SET_FAILED,
     INVALID_IP_VERSION,
     BITSTREAM_CREATION_FAILED,
@@ -45,7 +46,10 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
         error_message = "Memory allocation failed.";
         break;
     case SOCKET_STATE_NOT_READY:
-        error_message = "Socket state is not in ready state.";
+        error_message = "Socket is not in ready state.";
+        break;
+    case SOCKET_STATE_NOT_ESTABLISHED:
+        error_message = "Socket is not in an established connection.";
         break;
     case TIMEOUT_SET_FAILED:
         error_message = "Setting timeout in recvfrom() failed.";
