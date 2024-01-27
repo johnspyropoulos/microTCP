@@ -416,6 +416,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
         /* Initiating case */
 
         /* Send FIN ACK segment */
+        socket->seq_number += payload_size + 1;
         bitstream = create_bitstream(socket, FIN_BIT | ACK_BIT, NULL, payload_size, &stream_len);
         if (bitstream == NULL)
         {
