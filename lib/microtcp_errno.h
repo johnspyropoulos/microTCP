@@ -27,7 +27,8 @@ enum MICROTCP_ERRNO
     HANDSHAKE_FAILED,
     SENDTO_FAILED,
     RECVFROM_CORRUPTED,
-    CHECKSUM_VALIDATION_FAILED
+    CHECKSUM_VALIDATION_FAILED,
+    FIN_ACK_PACKET_EXPECTED
 };
 
 enum MICROTCP_ERRNO MICRO_ERRNO = ALL_GOOD;
@@ -83,6 +84,9 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
         break;
     case CHECKSUM_VALIDATION_FAILED:
         error_message = "Header's checksum does not verify packet's byte sequence.";
+        break;
+    case FIN_ACK_PACKET_EXPECTED:
+        error_message = "Expected packet with FIN ACK flags.";
         break;
     default:
         error_message = "Unknown microtcp error number (default).";

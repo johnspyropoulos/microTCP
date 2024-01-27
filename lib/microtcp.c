@@ -353,6 +353,108 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
 
 int microtcp_shutdown(microtcp_sock_t *socket, int how)
 {
+        int payload_size = 0;
+        size_t stream_len;
+        void* bitstream;
+        socklen_t len = sizeof(*(socket->remote_end_host));
+
+        /* Responding case */
+        if (socket->state == CLOSING_BY_HOST || socket->state == CLOSING_BY_PEER)
+        {
+                /* Send ACK segment */
+                bitstream = create_bitstream(socket, ACK_BIT, NULL, payload_size, &stream_len);
+                if (bitstream == NULL)
+                {
+                        microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                        return -1;
+                }
+
+                len = sizeof(*(socket->remote_end_host));
+                sendto(socket->sd, bitstream, stream_len, stream_len, socket->remote_end_host, len);
+                free(bitstream);
+
+                /* Send FIN ACK segment*/
+                bitstream = create_bitstream(socket, FIN_BIT | ACK_BIT, NULL, payload_size, &stream_len);
+                if (bitstream == NULL)
+                {
+                        microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                        return -1;
+                }
+                sendto(socket->sd, bitstream, stream_len, stream_len, socket->remote_end_host, len);
+                
+                free(bitstream);
+
+                /* Receive ACK segment */
+                recvfrom(socket->sd, socket->recvbuf, sizeof(microtcp_header_t), NO_FLAGS_BITS, socket->remote_end_host, &len);
+                microtcp_segment_t* rec_ack_segment = extract_bitstream(socket->recvbuf);
+                if (rec_ack_segment->header.control != ACK_BIT || rec_ack_segment->header.ack_number != socket->seq_number + 1)
+                {
+                        microtcp_set_errno((rec_ack_segment->header.control != ACK_BIT) ? ACK_PACKET_EXPECTED : ACK_NUMBER_MISMATCH);
+                        free(rec_ack_segment);
+                        return -1;
+                }
+
+                socket->state = CLOSED;
+                        
+                return 0;
+        }
+
+        /* Initiating case */
+
+        /* Send FIN ACK segment */
+        bitstream = create_bitstream(socket, FIN_BIT | ACK_BIT, NULL, payload_size, &stream_len);
+        if (bitstream == NULL)
+        {
+                microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                return -1;
+        }
+
+        len = sizeof(*(socket->remote_end_host));
+        sendto(socket->sd, bitstream, stream_len, stream_len, socket->remote_end_host, len);
+        free(bitstream);
+
+        /* Receive ACK segment */
+        recvfrom(socket->sd, socket->recvbuf, sizeof(microtcp_header_t), NO_FLAGS_BITS, socket->remote_end_host, &len);
+        microtcp_segment_t* rec_ack_segment = extract_bitstream(socket->recvbuf);
+        if (rec_ack_segment->header.control != ACK_BIT || rec_ack_segment->header.ack_number != socket->seq_number + 1)
+        {
+                microtcp_set_errno((rec_ack_segment->header.control != ACK_BIT) ? ACK_PACKET_EXPECTED : ACK_NUMBER_MISMATCH);
+                free(rec_ack_segment);
+                return -1;
+        }
+
+        free(rec_ack_segment);
+
+        socket->state = (socket->cliaddr == NULL) ? CLOSING_BY_PEER : CLOSING_BY_HOST;
+
+        /* Receive FIN ACK segment */
+        len = sizeof(*(socket->remote_end_host));
+        recvfrom(socket->sd, socket->recvbuf, sizeof(microtcp_header_t), NO_FLAGS_BITS, socket->remote_end_host, &len);
+        microtcp_segment_t* rec_fin_ack_segment = extract_bitstream(socket->recvbuf);
+        if (rec_fin_ack_segment->header.control != (FIN_BIT | ACK_BIT))
+        {
+                microtcp_set_errno(FIN_ACK_PACKET_EXPECTED);
+                free(rec_fin_ack_segment);
+                return -1;
+        }
+
+        socket->seq_number += payload_size + 1;
+        socket->ack_number = rec_fin_ack_segment->header.seq_number + 1;
+        free(rec_fin_ack_segment);
+
+        /* Send ACK segment */
+        len = sizeof(*(socket->remote_end_host));
+        bitstream = create_bitstream(socket, FIN_BIT | ACK_BIT, NULL, payload_size, &stream_len);
+        {
+                microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                return -1;
+        }
+
+        sendto(socket->sd, bitstream, stream_len, NO_FLAGS_BITS, socket->remote_end_host, len);
+        free(bitstream);
+        socket->state = CLOSED;
+
+        return 0;
 }
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags)
@@ -362,6 +464,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
 }
+
 /* Start of definitions of inner working (helper) functions: */
 
 static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t control, const void *const payload, size_t payload_len, size_t *stream_len)
@@ -399,7 +502,7 @@ static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t cont
         return bitstream;
 }
 
-static int isValidChecksum(void *const bitstream)
+static int is_valid_checksum(void *const bitstream)
 {
         uint32_t *bitstream_checksum = &(((microtcp_header_t *)bitstream)->checksum);
         size_t bitstream_size = sizeof(microtcp_header_t) + ((microtcp_header_t *)bitstream)->data_len;
@@ -414,7 +517,7 @@ static int isValidChecksum(void *const bitstream)
 
 static microtcp_segment_t *extract_bitstream(void *const bitstream)
 {
-        if (!isValidChecksum)
+        if (!is_valid_checksum)
         {
                 microtcp_set_errno(CHECKSUM_VALIDATION_FAILED);
                 return NULL;
