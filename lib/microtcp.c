@@ -104,7 +104,7 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
 
         micro_sock.servaddr = NULL;
         micro_sock.cliaddr = NULL;
-        micro_sock.other_end_host = NULL;
+        micro_sock.remote_end_host = NULL;
 
         /* Set blocking time for receive at 0.2 seconds. */
         struct timeval timeout;
@@ -235,7 +235,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                 return -1;
         }
         memcpy(socket->servaddr, address, address_len);
-        socket->opposite_end_host = socket->servaddr;
+        socket->remote_end_host = socket->servaddr;
         socket->packets_send++;
         socket->state = ESTABLISHED;
         free(bitstream_send);
@@ -344,7 +344,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
         }
         /* What about the other participant????? */
         memcpy(socket->cliaddr, address, address_len);
-        socket->opposite_end_host = socket->cliaddr;
+        socket->remote_end_host = socket->cliaddr;
         socket->state = ESTABLISHED;
         free(bitstream_send);
         return 0;
@@ -356,49 +356,6 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags)
 {
-        if (socket->state != ESTABLISHED)
-        {
-                microtcp_set_errno(SOCKET_STATE_NOT_ESTABLISHED);
-                return -1;
-        }
-
-        const size_t max_payload_size = MICROTCP_MSS - sizeof(microtcp_header_t);
-        const size_t minimum_available_buffer_size = 2 * sizeof(microtcp_header_t); /* UNUSED */
-        size_t bytes_sent = 0;
-        size_t bytes_left = length;
-        size_t unacknowledged_bytes = 0;
-        size_t acknowledged_bytes = 0;
-        size_t starting_seq_number = socket->seq_number;
-
-        while (bytes_left > 0)
-        {
-                if (unacknowledged_bytes + MICROTCP_MSS >= socket->cwnd)
-                {
-                        /* No more room, due to cwnd limitation, we must receive 
-                        acknowledgements for the packets that we already have received. */
-
-                }
-                size_t payload_size = (bytes_left > max_payload_size) ? max_payload_size : bytes_left;
-                size_t bitstream_size = 0;
-                socket->seq_number += payload_size;
-                /* Update seq_number. */
-                /* Update ack_number. (IF needed) */
-                void *bitstream = create_bitstream(socket, ACK_BIT, &(buffer[bytes_sent]), payload_size, &bitstream_size);
-                if (bitstream == NULL)
-                {
-                        microtcp_set_errno(BITSTREAM_CREATION_FAILED);
-                        return -1;
-                }
-                ssize_t send_ret_val = sendto(socket->sd, bitstream, bitstream_size, NO_FLAGS_BITS, socket->opposite_end_host, sizeof(*(socket->opposite_end_host)));
-                if (send_ret_val < 0)
-                {
-                        microtcp_set_errno(SENDTO_FAILED);
-                        free(bitstream);
-                        return -1;
-                }
-                unacknowledged_bytes += payload_size;
-                bytes_sent += payload_size;
-        }
 }
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)

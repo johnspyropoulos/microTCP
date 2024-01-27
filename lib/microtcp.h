@@ -103,7 +103,7 @@ typedef struct
         uint64_t bytes_lost;
 
         struct sockaddr* servaddr;  /* CSD5072 */
-        struct sockaddr* opposite_end_host; /* CSD4624: Never mallocED, just a reference. */
+        struct sockaddr* remote_end_host; /* CSD4624: Never mallocED, just a reference. */
         struct sockaddr* cliaddr;  /* CSD5072 */
 } microtcp_sock_t;
 
