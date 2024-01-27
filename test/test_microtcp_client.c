@@ -61,7 +61,7 @@ main(int argc, char **argv)
     microtcp_connect(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
     printf("Connected\n");
 
-    char sbuff[1024];
+/*     char sbuff[1024];
     char rbuff[1024];
     do
     {
@@ -74,7 +74,7 @@ main(int argc, char **argv)
 
     printf("Closing connection...\n");
     microtcp_shutdown(&tcpsocket, SHUT_RDWR);
-    printf("Connection closed\n");
+    printf("Connection closed\n"); */
     
     return EXIT_SUCCESS;
 }

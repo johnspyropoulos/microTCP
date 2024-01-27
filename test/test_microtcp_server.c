@@ -69,7 +69,7 @@ main(int argc, char **argv)
 
     const char* rmsg = "Message received";
 
-    char buff[1024] = {0};
+/*     char buff[1024] = {0};
     do
     {
         int bytes_rec = microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
@@ -82,6 +82,6 @@ main(int argc, char **argv)
     } while (tcpsocket.cliaddr != NULL);
 
     printf("Connection closed by peer\n");
-
+ */
     return EXIT_SUCCESS;
 }
