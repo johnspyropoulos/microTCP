@@ -20,11 +20,11 @@
 
 /**
  * CS335 - Project Phase A
- * 
+ *
  * Ioannis Spyropoulos - csd5072
  * Georgios Evangelinos - csd4624
  * Niki Psoma - csd5038
-*/
+ */
 
 #ifndef LIB_MICROTCP_H_
 #define LIB_MICROTCP_H_
@@ -52,6 +52,9 @@
 #define INITIAL_CHECKSUM_VALUE 0
 #define NO_FLAGS_BITS 0
 
+#define MIN(X,Y) (X < Y) ? X : Y
+#define MAX(X,Y) (X > Y) ? X : Y
+
 /**
  * Possible states of the microTCP socket
  *
@@ -61,12 +64,12 @@
 typedef enum
 {
         READY,
-        WARNING, /* Socket created, but soft errors occured. */
-        LISTEN, /* After bind() the socket it ready for incoming connections. */
+        WARNING,     /* Socket created, but soft errors occured. */
+        LISTEN,      /* After bind() the socket it ready for incoming connections. */
         ESTABLISHED, /* After accept() the connection is established. */
         CLOSING_BY_PEER,
         CLOSING_BY_HOST,
-        CLOSED, 
+        CLOSED,
         INVALID
 } mircotcp_state_t;
 
@@ -83,17 +86,23 @@ typedef struct
         size_t init_win_size;   /**< The window size negotiated at the 3-way handshake */
         size_t curr_win_size;   /**< The current window size */
 
-        uint8_t *recvbuf;       /**< The *receive* buffer of the TCP
-                                     connection. It is allocated during the connection establishment and
-                                     is freed at the shutdown of the connection. This buffer is used
-                                     to retrieve the data from the network. */
+        uint8_t *recvbuf; /**< The *receive* buffer of the TCP
+                               connection. It is allocated during the connection establishment and
+                               is freed at the shutdown of the connection. This buffer is used
+                               to retrieve the data from the network. */
 
-        size_t buf_fill_level;  /**< Amount of data in the buffer */
+        struct bitstream_queue *unacknowledged_queue; 
+        /* CSD4624 Similar to recvbuf. But for sending packets.
+           Basically unacknowledged_queue holds each packet in bitstream
+           form that has been sent to the receiver and has not
+           yet been acknowledged.
+        */
+        size_t buf_fill_level; /**< Amount of data in the buffer */
 
-        size_t cwnd;            /* Bytes that can be sent before receiving an ACK. */
+        size_t cwnd; /* Bytes that can be sent before receiving an ACK. */
         size_t ssthresh;
 
-        size_t seq_number; /**< Keep the state of the sequence number */ 
+        size_t seq_number; /**< Keep the state of the sequence number */
         size_t ack_number; /**< Keep the state of the ack number */
         uint64_t packets_send;
         uint64_t packets_received;
@@ -102,9 +111,9 @@ typedef struct
         uint64_t bytes_received;
         uint64_t bytes_lost;
 
-        struct sockaddr* servaddr;  /* CSD5072 */
-        struct sockaddr* remote_end_host; /* CSD4624: Never mallocED, just a reference. */
-        struct sockaddr* cliaddr;  /* CSD5072 */
+        struct sockaddr *servaddr;        /* CSD5072 */
+        struct sockaddr *remote_end_host; /* CSD4624: Never mallocED, just a reference. */
+        struct sockaddr *cliaddr;         /* CSD5072 */
 } microtcp_sock_t;
 
 /*
@@ -113,23 +122,23 @@ typedef struct
  */
 typedef struct
 {
-        uint32_t seq_number;  /**< Sequence number */ /* If SYN flag bit in set in the
-                               **< control field, this is the initial sequence number. */
-        uint32_t ack_number;  /**< ACK number */
-        uint16_t control;     /**< Control bits (e.g. SYN, ACK, FIN) */
-        uint16_t window;      /**< Window size in bytes */
-        uint32_t data_len;    /**< Data length in bytes (EXCLUDING header) */
-        uint32_t future_use0; /**< 32-bits for future use */
-        uint32_t future_use1; /**< 32-bits for future use */
-        uint32_t future_use2; /**< 32-bits for future use */
-        uint32_t checksum;    /**< CRC-32 checksum, see crc32() in utils folder */
+        uint32_t seq_number; /**< Sequence number */ /* If SYN flag bit in set in the
+                                                      **< control field, this is the initial sequence number. */
+        uint32_t ack_number;                         /**< ACK number */
+        uint16_t control;                            /**< Control bits (e.g. SYN, ACK, FIN) */
+        uint16_t window;                             /**< Window size in bytes */
+        uint32_t data_len;                           /**< Data length in bytes (EXCLUDING header) */
+        uint32_t future_use0;                        /**< 32-bits for future use */
+        uint32_t future_use1;                        /**< 32-bits for future use */
+        uint32_t future_use2;                        /**< 32-bits for future use */
+        uint32_t checksum;                           /**< CRC-32 checksum, see crc32() in utils folder */
 } microtcp_header_t;
 
-typedef struct 
+typedef struct
 {
         microtcp_header_t header;
         uint8_t *payload;
-        /* Notice: 
+        /* Notice:
          * Padding is possibly required.
          * When sending the microtcp_segment, it is required to allocate
          * enough memory for the microtcp_header_t, (the padding) and the contents of the payload.
@@ -158,7 +167,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
 int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t address_len);
 
 int microtcp_shutdown(microtcp_sock_t *socket, int how);
-                                                                        /* TODO: what the fuck is this */
+/* TODO: what the fuck is this */
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags);
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags);

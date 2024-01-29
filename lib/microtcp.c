@@ -27,39 +27,17 @@
  */
 
 #include "microtcp.h"
-#include "../utils/crc32.h"
 #include "microtcp_errno.h"
+#include "bitstream.h"
+#include "send_handler.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include <time.h>
 #include <stdbool.h>
 
-#define microtcp_set_errno(errno_) microtcp_set_errno(errno_, __func__, __LINE__)
-
-/* Start of declarations of inner working (helper) functions: */
-
-/**
- * @brief Creates a MicroTCP bitstream, containing a header and (optionally) payload
- * @param socket MicroTCP socket
- * @param control control bits
- * @param payload payload, set NULL if no payload
- * @param payload_len payload size in bytes
- * @param stream_len is set to the size of the bitstream after successful creation
- * @returns the created bitstream
- */
-static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t control, const void *const payload, size_t payload_len, size_t *stream_len);
-
-/**
- * @brief Extracts a MicroTCP bitstream, returning the packet's header and saving its payload in the socket receive buffer
- * @param socket MicroTCP socket
- * @param bitstream bitstream to extract
- * @returns packet header
- */
-static microtcp_segment_t *extract_bitstream(void *const bitstream);
-
-/* End   of declarations of inner working (helper) functions. */
 
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
 {
@@ -89,6 +67,8 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
 
         if ((micro_sock.recvbuf = malloc(MICROTCP_RECVBUF_LEN)) == NULL)
                 microtcp_set_errno(MALLOC_FAILED);
+        if ((micro_sock.unacknowledged_queue = bs_create_queue()) == NULL)
+                microtcp_set_errno(BS_QUEUE);
 
         micro_sock.buf_fill_level = 0;
         micro_sock.ssthresh = MICROTCP_INIT_SSTHRESH;
@@ -356,92 +336,58 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length, int flags)
 {
+        if (socket->state != ESTABLISHED)
+        {
+                microtcp_set_errno(SOCKET_STATE_NOT_ESTABLISHED);
+                return -1;
+        }
+
+        const size_t max_payload_size = MICROTCP_MSS - sizeof(microtcp_header_t);
+        size_t remaining_bytes = length;
+        size_t acknowledged_bytes = 0;
+        size_t starting_seq_number = socket->seq_number;
+        size_t buffer_index = socket->seq_number - starting_seq_number; /* Index used to segment buffer (given by caller). */
+
+        /* Check for leftover SYN packets.*/
+
+        while (remaining_bytes > 0)
+        {
+                size_t payload_size = MIN(remaining_bytes, max_payload_size);
+                /* Data that the sender is typically allowed to send, respecting
+                both receiver's capacityand network's current congestion stat. */
+                size_t effective_window_size  = MIN(socket->cwnd, socket->curr_win_size);
+                
+                if (socket->unacknowledged_queue->unacknowledged_bytes + payload_size > effective_window_size)
+                {
+
+                        /* Retrieve ACKnowledgements. */
+                        continue;
+                }
+
+                size_t bitstream_len = 0;
+                socket->seq_number += payload_size;  /* Update seq_number. */
+                void *bitstream = create_bitstream(socket, ACK_BIT, buffer + buffer_index, payload_size, &bitstream_len);
+                if (bitstream == NULL)
+                {
+                        microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                        socket->seq_number -= payload_size;
+                        return -1;
+                }
+                ssize_t send_ret_val = sendto(socket->sd, bitstream, bitstream_len, NO_FLAGS_BITS, socket->remote_end_host, sizeof(*(socket->remote_end_host)));
+                if (send_ret_val < 0)
+                {
+                        microtcp_set_errno(SENDTO_FAILED);
+                        socket->seq_number -= payload_size;
+                        free(bitstream);
+                        return -1;
+                }
+                bs_enqueue(socket->unacknowledged_queue, bitstream, bitstream_len);
+                socket->bytes_send += bitstream_len;
+                socket->packets_send++;
+                buffer_index += payload_size;
+        }
 }
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
 }
-/* Start of definitions of inner working (helper) functions: */
-
-static void *create_bitstream(const microtcp_sock_t *const socket, uint16_t control, const void *const payload, size_t payload_len, size_t *stream_len)
-{
-        if (socket == NULL)
-        {
-                microtcp_set_errno(BITSTREAM_CREATION_FAILED);
-                return NULL;
-        }
-
-        microtcp_header_t header;
-        header.seq_number = socket->seq_number;
-        header.ack_number = socket->ack_number;
-        header.control = control;
-        header.window = socket->curr_win_size;
-        header.data_len = payload_len;
-        header.future_use0 = 0;
-        header.future_use1 = 0;
-        header.future_use2 = 0;
-        header.checksum = INITIAL_CHECKSUM_VALUE;
-
-        void *bitstream = malloc(sizeof(microtcp_header_t) + payload_len);
-        if (bitstream == NULL)
-        {
-                microtcp_set_errno(MALLOC_FAILED);
-                return NULL;
-        }
-
-        memcpy(bitstream, &header, sizeof(microtcp_header_t));
-        memcpy(bitstream + sizeof(microtcp_header_t), payload, payload_len);
-
-        *stream_len = sizeof(microtcp_header_t) + payload_len;
-
-        ((microtcp_header_t *)bitstream)->checksum = crc32(bitstream, *stream_len);
-        return bitstream;
-}
-
-static int isValidChecksum(void *const bitstream)
-{
-        uint32_t *bitstream_checksum = &(((microtcp_header_t *)bitstream)->checksum);
-        size_t bitstream_size = sizeof(microtcp_header_t) + ((microtcp_header_t *)bitstream)->data_len;
-
-        uint32_t included_checksum_value = *bitstream_checksum;
-        *bitstream_checksum = INITIAL_CHECKSUM_VALUE;
-        uint32_t calculated_checksum_value = crc32(bitstream, bitstream_size);
-        *bitstream_checksum = included_checksum_value;
-
-        return included_checksum_value == calculated_checksum_value;
-}
-
-static microtcp_segment_t *extract_bitstream(void *const bitstream)
-{
-        if (!isValidChecksum)
-        {
-                microtcp_set_errno(CHECKSUM_VALIDATION_FAILED);
-                return NULL;
-        }
-
-        microtcp_segment_t *segment = malloc(sizeof(microtcp_segment_t));
-        segment->payload = NULL;
-        if (bitstream == NULL || segment == NULL)
-        {
-                microtcp_set_errno(bitstream == NULL ? NULL_POINTER_ARGUMENT : MALLOC_FAILED);
-                return NULL;
-        }
-
-        memcpy(&(segment->header), bitstream, sizeof(microtcp_header_t));
-
-        if (segment->header.data_len > 0)
-                segment->payload = malloc(segment->header.data_len);
-
-        if (segment->payload == NULL && segment->header.data_len > 0)
-        {
-                microtcp_set_errno(MALLOC_FAILED);
-                return NULL;
-        }
-
-        memcpy(segment->payload, bitstream + sizeof(microtcp_header_t), segment->header.data_len);
-
-        return segment;
-}
-/* End   of definitions of inner working (helper) functions. */
-
-#undef microtcp_set_errno

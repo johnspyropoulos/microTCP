@@ -3,6 +3,7 @@
 
 lib/CMakeFiles/microtcp.dir/microtcp.c.o: lib/microtcp.c \
   utils/crc32.h \
+  lib/bitstream.h \
   lib/microtcp.h \
   lib/microtcp_errno.h \
   /usr/include/alloca.h \
@@ -85,6 +86,7 @@ lib/CMakeFiles/microtcp.dir/microtcp.c.o: lib/microtcp.c \
   /usr/include/sys/cdefs.h \
   /usr/include/sys/select.h \
   /usr/include/sys/socket.h \
+  /usr/include/sys/time.h \
   /usr/include/sys/types.h \
   /usr/include/time.h \
   /usr/lib/gcc/x86_64-redhat-linux/13/include/stdarg.h \
@@ -100,6 +102,8 @@ lib/CMakeFiles/microtcp.dir/microtcp.c.o: lib/microtcp.c \
 /usr/lib/gcc/x86_64-redhat-linux/13/include/stdarg.h:
 
 /usr/include/time.h:
+
+/usr/include/sys/time.h:
 
 /usr/include/sys/select.h:
 
@@ -130,6 +134,10 @@ lib/CMakeFiles/microtcp.dir/microtcp.c.o: lib/microtcp.c \
 /usr/include/stdio.h:
 
 /usr/include/bits/types/timer_t.h:
+
+/usr/include/bits/wchar.h:
+
+/usr/include/bits/types/struct_tm.h:
 
 /usr/include/bits/waitflags.h:
 
@@ -181,6 +189,8 @@ utils/crc32.h:
 
 /usr/include/bits/types/struct_itimerspec.h:
 
+lib/bitstream.h:
+
 /usr/include/bits/endianness.h:
 
 lib/microtcp.h:
@@ -197,6 +207,16 @@ lib/microtcp.h:
 
 /usr/include/asm-generic/posix_types.h:
 
+/usr/include/bits/pthreadtypes.h:
+
+/usr/include/bits/floatn.h:
+
+/usr/include/asm/socket.h:
+
+lib/microtcp.c:
+
+/usr/include/bits/types/struct_timespec.h:
+
 /usr/include/features-time64.h:
 
 /usr/include/asm-generic/socket.h:
@@ -208,16 +228,6 @@ lib/microtcp.h:
 /usr/include/asm/posix_types_64.h:
 
 /usr/include/bits/types/locale_t.h:
-
-/usr/include/bits/pthreadtypes.h:
-
-/usr/include/bits/floatn.h:
-
-/usr/include/asm/socket.h:
-
-lib/microtcp.c:
-
-/usr/include/bits/types/struct_timespec.h:
 
 /usr/include/bits/stdint-intn.h:
 
@@ -268,7 +278,3 @@ lib/microtcp_errno.h:
 /usr/include/bits/stdio_lim.h:
 
 /usr/include/bits/types/struct_timeval.h:
-
-/usr/include/bits/wchar.h:
-
-/usr/include/bits/types/struct_tm.h:

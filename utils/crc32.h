@@ -20,6 +20,8 @@
 
 #ifndef UTILS_CRC32_H_
 #define UTILS_CRC32_H_
+#include <stdint.h>
+#include <stddef.h>
 
 /**
  * CRC-32 calculation using lookup tables, supporting progressive CRC calculation

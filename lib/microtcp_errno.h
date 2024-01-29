@@ -13,6 +13,7 @@ enum MICROTCP_ERRNO
 
     /* SPECIFICS */
     NULL_POINTER_ARGUMENT,
+    INVALID_ARGUMENT,
     MALLOC_FAILED,
     SOCKET_STATE_NOT_READY,
     SOCKET_STATE_NOT_ESTABLISHED,
@@ -27,7 +28,9 @@ enum MICROTCP_ERRNO
     HANDSHAKE_FAILED,
     SENDTO_FAILED,
     RECVFROM_CORRUPTED,
-    CHECKSUM_VALIDATION_FAILED
+    CHECKSUM_VALIDATION_FAILED,
+    BS_QUEUE,
+    SEND_HANDLER_FAILED
 };
 
 enum MICROTCP_ERRNO MICRO_ERRNO = ALL_GOOD;
@@ -84,6 +87,15 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
     case CHECKSUM_VALIDATION_FAILED:
         error_message = "Header's checksum does not verify packet's byte sequence.";
         break;
+    case INVALID_ARGUMENT:
+        error_message = "Argument was invalid, check function and line to determine why.";
+        break;
+    case BS_QUEUE:
+        error_message = "Something went wrong with struct bitstream_queue check function and line to determine.";
+        break;
+    case SEND_HANDLER_FAILED:
+        error_message = "Send handler failed.";
+        break;
     default:
         error_message = "Unknown microtcp error number (default).";
         break;
@@ -94,4 +106,5 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
 #endif
 }
 
+#define microtcp_set_errno(errno_) microtcp_set_errno(errno_, __func__, __LINE__)
 #endif
