@@ -87,6 +87,7 @@ static int acknowldge_up_to(microtcp_sock_t *socket, const uint32_t _ack_number)
                 if (last_node)
                         break;
         }
+        socket->ack_number = _ack_number;
 }
 
 int packet_verifier(microtcp_sock_t *socket)
@@ -94,10 +95,13 @@ int packet_verifier(microtcp_sock_t *socket)
         size_t verified_bytes = 0;             /* Returing counter. */
         uint8_t static_bitsteam[MICROTCP_MSS]; /* static pass-trough buffer. */
         socklen_t addr_len = sizeof(*(socket->remote_end_host));
+        size_t initial_ack_number = socket->ack_number;
+        uint8_t duplicate_ack_counter = 0;
+        size_t last_received_ack_number = socket->ack_number;
+
 
         while (!bs_is_empty_queue(socket->unacknowledged_queue))
         {
-
                 ssize_t recv_ret_val = recvfrom(socket->sd, static_bitsteam, MICROTCP_MSS, NO_FLAGS_BITS, socket->remote_end_host, &addr_len);
                 if (recv_ret_val < 0)  /* Timeout exceeded. No ACKs received in timeout period. */
                         break;
@@ -117,14 +121,18 @@ int packet_verifier(microtcp_sock_t *socket)
                         ;
                 }
 
+                if (header->ack_number)
+
                 verified_bytes += acknowldge_up_to(socket, header->ack_number);
 
                 /* ACK packet, might also contain data. */
                 if (header->data_len > 0)
                 {
+/*                         size_t available_space_in_buffer = MICROTCP_RECVBUF_LEN - socket->buf_fill_level; */
                         /* SO far we do not accept mixed packets. But we should implement. */
                         ;
                 }
+
         }
         return verified_bytes;
 }

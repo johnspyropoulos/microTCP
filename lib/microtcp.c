@@ -38,7 +38,6 @@
 #include <time.h>
 #include <stdbool.h>
 
-
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
 {
         microtcp_sock_t micro_sock;
@@ -348,15 +347,20 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 
         while (remaining_bytes > 0)
         {
-                /* Sends as many packets as possible, until queue has reached its limit. */
+                /* Sends as many packets as possible, until queue has reached its 'unacknowledged_bytes' limit. */
                 int sender_ret_val = packet_sender(socket, buffer, length, &buffer_index);
                 if (sender_ret_val < 0)
                 {
                         microtcp_set_errno(SEND_HANDLER_FAILED);
                         return -1;
                 }
-                
-                /* Retrieve ACKs */
+
+                /* Retrieve ACKs  Receiver might encapsulate payload.   */
+                /* Meaning that the other host might want to send data  */
+                /* to us, and meanwhile he is acknowledging what we are */
+                /* sending to him. How is it possible for the receiver  */
+                /* to acknowledging packets while sending? Well...      */
+                /* ... */
                 int verifier_ret_val = packet_verifier(socket);
                 remaining_bytes -= verifier_ret_val;
                 buffer_index += verifier_ret_val;
@@ -365,4 +369,35 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
+        static uint8_t left_over_data[MICROTCP_MSS];
+        static size_t left_over_data_byte_count = 0;
+        ssize_t received_byte_counter = 0;
+        uint8_t local_recv_buffer[MICROTCP_MSS];
+        socklen_t addr_len = sizeof(*(socket->remote_end_host))
+
+            if (socket->state != ESTABLISHED)
+        {
+                microtcp_set_errno(SOCKET_STATE_NOT_ESTABLISHED);
+                return -1;
+        }
+
+        if (socket->buf_fill_level > 0)
+        {
+                /* Empty buffer first. */
+                ;
+        }
+
+        uint8_t local_recv_buffer[MICROTCP_MSS];
+        ssize_t recv_ret_val = recvfrom(socket->sd, local_recv_buffer, MICROTCP_MSS, NO_FLAGS_BITS, socket->remote_end_host, &addr_len);
+        if (recv_ret_val > length)
+        {
+                memcpy(buffer, local_recv_buffer, length);
+                memcpy(left_over_data, local_recv_buffer + length, recv_ret_val - length);
+        }
+
+        /* Check if receive_buffer has something. */
+        /* If not then use UDP::recvfrom(). */
+        /* When using UDP::recvfrom() use MSS as length.
+           if user requested less bytes, just buffer them. */
+        /* Buffer shall contain only payload. Not headers or Bitstreams. */
 }
