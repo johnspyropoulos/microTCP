@@ -7,13 +7,10 @@
 #include "microtcp.h"
 #include "bitstream.h"
 
-static
-
-    /**
-     * @returns Amounts of bytes sent from buffer_index and after.
-     */
-    int
-    packet_sender(microtcp_sock_t *socket, const void *const buffer, size_t length, size_t *buffer_index)
+/**
+ * @returns Amounts of bytes sent from buffer_index and after.
+ */
+int packet_sender(microtcp_sock_t *socket, const void *const buffer, size_t length, size_t *buffer_index)
 {
         const size_t max_payload_size = MICROTCP_MSS - sizeof(microtcp_header_t);
         size_t bitstream_len = 0;
@@ -43,7 +40,7 @@ static
                 byte_sent_counter += payload_size;
         }
 
-        /* Send bitstreams contained in queue. */
+        /* Send bitstreams contained in transmittion queue. */
         struct bitstream_node *current_node = socket->unacknowledged_queue->front_node;
         while (current_node)
         {
@@ -63,6 +60,7 @@ static int acknowldge_up_to(microtcp_sock_t *socket, const uint32_t _ack_number)
         /* Search for packet with that ack_number. */
         struct bitstream_node *current_node = socket->unacknowledged_queue->front_node;
         uint8_t found_valid_node = false;
+        int verified_bytes = 0;
 
         /* Search if _ack_number corresponds to a packet previously sent, waiting for ACK. */
         while (current_node)
@@ -75,7 +73,7 @@ static int acknowldge_up_to(microtcp_sock_t *socket, const uint32_t _ack_number)
         if (found_valid_node == false)
         {
                 microtcp_set_errno(ACK_NUMBER_MISMATCH);
-                return 0;
+                return verified_bytes = 0;
         }
 
         /* Remove all packets up_to packet with ack_number == _ack_number. */
@@ -83,6 +81,7 @@ static int acknowldge_up_to(microtcp_sock_t *socket, const uint32_t _ack_number)
         while (true)
         {
                 uint8_t last_node = current_node->required_ack_number == _ack_number;
+                verified_bytes += (current_node->bitstream_size - sizeof(microtcp_header_t));
                 current_node = current_node->next;
                 bs_dequeue(socket->unacknowledged_queue);
                 if (last_node)
@@ -100,10 +99,9 @@ int packet_verifier(microtcp_sock_t *socket)
         {
 
                 ssize_t recv_ret_val = recvfrom(socket->sd, static_bitsteam, MICROTCP_MSS, NO_FLAGS_BITS, socket->remote_end_host, &addr_len);
-                if (recv_ret_val < 0 && verified_bytes == 0)
-                        return -1;
-                /* Timeout exceeded.  No ACKs. */
-                if (!is_valid_bistream(static_bitsteam)) /* Check bitstream's validity, if invalid discard. */
+                if (recv_ret_val < 0)  /* Timeout exceeded. No ACKs received in timeout period. */
+                        break;
+                if (!is_valid_bistream(static_bitsteam))  /* Check bitstream's validity, if invalid discard. */
                         continue;
                 microtcp_header_t *header = (microtcp_header_t *)static_bitsteam;
                 if (header->control != ACK_BIT)
@@ -112,14 +110,14 @@ int packet_verifier(microtcp_sock_t *socket)
                         continue;
                 }
 
-                if (header->control & FIN_BIT)
+                if (header->control & FIN_BIT)  /* Packet contained a FIN_BIT shutdown() shall be called. */
                 {
 
                         /* TODO: Call Shutdown, from sender. */
                         ;
                 }
 
-                acknowldge_up_to(socket, header->ack_number);
+                verified_bytes += acknowldge_up_to(socket, header->ack_number);
 
                 /* ACK packet, might also contain data. */
                 if (header->data_len > 0)
@@ -128,6 +126,7 @@ int packet_verifier(microtcp_sock_t *socket)
                         ;
                 }
         }
+        return verified_bytes;
 }
 
 #endif

@@ -11,7 +11,6 @@ struct bitstream_node
         void *bitstream;
         size_t bitstream_size;
         uint32_t required_ack_number;
-        uint8_t verified;
         struct bitstream_node *next;
 };
 

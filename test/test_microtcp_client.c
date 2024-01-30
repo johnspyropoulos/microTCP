@@ -61,20 +61,12 @@ main(int argc, char **argv)
     microtcp_connect(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
     printf("Connected\n");
 
-/*     char sbuff[1024];
-    char rbuff[1024];
-    do
-    {
-        printf("To server: ");
-        fgets(sbuff, 1024, stdin);
-        microtcp_send(&tcpsocket, sbuff, strlen(sbuff), NO_FLAGS_BITS);
-        microtcp_recv(&tcpsocket, rbuff, 1024, NO_FLAGS_BITS);
-        printf("From server: %s\n", rbuff);
-    } while (strcmp(sbuff, "exit\n") != 0);
+    char sbuff[1000000] = {0};
+        microtcp_send(&tcpsocket, sbuff, sizeof(sbuff), NO_FLAGS_BITS);
 
     printf("Closing connection...\n");
     microtcp_shutdown(&tcpsocket, SHUT_RDWR);
-    printf("Connection closed\n"); */
+    printf("Connection closed\n"); 
     
     return EXIT_SUCCESS;
 }

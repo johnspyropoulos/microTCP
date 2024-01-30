@@ -355,13 +355,9 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
                         microtcp_set_errno(SEND_HANDLER_FAILED);
                         return -1;
                 }
-                int verifier_ret_val = packet_verifier();
-                if (verifier_ret_val < 0)
-                {
-                        microtcp_set_errno(SEND_HANDLER_FAILED);
-                        return -1;
-                }
-
+                
+                /* Retrieve ACKs */
+                int verifier_ret_val = packet_verifier(socket);
                 remaining_bytes -= verifier_ret_val;
                 buffer_index += verifier_ret_val;
         }

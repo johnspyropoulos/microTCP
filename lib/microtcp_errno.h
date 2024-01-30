@@ -33,9 +33,9 @@ enum MICROTCP_ERRNO
     SEND_HANDLER_FAILED
 };
 
-enum MICROTCP_ERRNO MICRO_ERRNO = ALL_GOOD;
+extern enum MICROTCP_ERRNO MICRO_ERRNO;
 
-static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_name_, int line_)
+static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *file_name_,  const char *function_name_, int line_)
 {
     const char *error_message;
     MICRO_ERRNO = errno_;
@@ -102,9 +102,10 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *function_
     }
 
 #ifdef DEBUG
-    fprintf(stderr, "Error in line %d (%s): %s\n", line_, function_name_, error_message);
+    fprintf(stderr, "Error in file %s, line %d (%s): %s\n", file_name_, line_, function_name_, error_message);
 #endif
 }
 
-#define microtcp_set_errno(errno_) microtcp_set_errno(errno_, __func__, __LINE__)
+#define microtcp_set_errno(errno_) microtcp_set_errno(errno_, __FILE__, __func__, __LINE__)
+
 #endif
