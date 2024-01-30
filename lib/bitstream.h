@@ -9,7 +9,9 @@
 struct bitstream_node
 {
         void *bitstream;
+        size_t bitstream_size;
         uint32_t required_ack_number;
+        uint8_t verified;
         struct bitstream_node *next;
 };
 
@@ -18,6 +20,7 @@ struct bitstream_queue
         struct bitstream_node *front_node;
         struct bitstream_node *rear_node;
         ssize_t unacknowledged_bytes;
+        size_t latest_seq_num;
 };
 
 struct bitstream_queue *bs_create_queue(void);

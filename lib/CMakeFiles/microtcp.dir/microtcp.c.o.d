@@ -1,21 +1,17 @@
 lib/CMakeFiles/microtcp.dir/microtcp.c.o: \
  /home/george/Documents/CSD/CS-335_Computer_Networks/Winter_Semester/ProjectPhaseB/A/microTCP/lib/microtcp.c \
  /usr/include/stdc-predef.h \
- /home/george/Documents/CSD/CS-335_Computer_Networks/Winter_Semester/ProjectPhaseB/A/microTCP/lib/../utils/crc32.h \
- /usr/lib/gcc/x86_64-redhat-linux/13/include/stdint.h \
- /usr/include/stdint.h /usr/include/bits/libc-header-start.h \
- /usr/include/features.h /usr/include/features-time64.h \
- /usr/include/bits/wordsize.h /usr/include/bits/timesize.h \
- /usr/include/sys/cdefs.h /usr/include/bits/long-double.h \
- /usr/include/gnu/stubs.h /usr/include/gnu/stubs-64.h \
- /usr/include/bits/types.h /usr/include/bits/typesizes.h \
- /usr/include/bits/time64.h /usr/include/bits/wchar.h \
- /usr/include/bits/stdint-intn.h /usr/include/bits/stdint-uintn.h \
- /usr/lib/gcc/x86_64-redhat-linux/13/include/stddef.h \
  /home/george/Documents/CSD/CS-335_Computer_Networks/Winter_Semester/ProjectPhaseB/A/microTCP/lib/microtcp.h \
- /usr/include/sys/types.h /usr/include/bits/types/clock_t.h \
- /usr/include/bits/types/clockid_t.h /usr/include/bits/types/time_t.h \
- /usr/include/bits/types/timer_t.h /usr/include/endian.h \
+ /usr/include/sys/types.h /usr/include/features.h \
+ /usr/include/features-time64.h /usr/include/bits/wordsize.h \
+ /usr/include/bits/timesize.h /usr/include/sys/cdefs.h \
+ /usr/include/bits/long-double.h /usr/include/gnu/stubs.h \
+ /usr/include/gnu/stubs-64.h /usr/include/bits/types.h \
+ /usr/include/bits/typesizes.h /usr/include/bits/time64.h \
+ /usr/include/bits/types/clock_t.h /usr/include/bits/types/clockid_t.h \
+ /usr/include/bits/types/time_t.h /usr/include/bits/types/timer_t.h \
+ /usr/lib/gcc/x86_64-redhat-linux/13/include/stddef.h \
+ /usr/include/bits/stdint-intn.h /usr/include/endian.h \
  /usr/include/bits/endian.h /usr/include/bits/endianness.h \
  /usr/include/bits/byteswap.h /usr/include/bits/uintn-identity.h \
  /usr/include/sys/select.h /usr/include/bits/select.h \
@@ -35,7 +31,10 @@ lib/CMakeFiles/microtcp.dir/microtcp.c.o: \
  /usr/include/asm-generic/bitsperlong.h /usr/include/asm/sockios.h \
  /usr/include/asm-generic/sockios.h \
  /usr/include/bits/types/struct_osockaddr.h /usr/include/netinet/in.h \
- /usr/include/bits/in.h \
+ /usr/include/bits/stdint-uintn.h /usr/include/bits/in.h \
+ /usr/lib/gcc/x86_64-redhat-linux/13/include/stdint.h \
+ /usr/include/stdint.h /usr/include/bits/libc-header-start.h \
+ /usr/include/bits/wchar.h \
  /home/george/Documents/CSD/CS-335_Computer_Networks/Winter_Semester/ProjectPhaseB/A/microTCP/lib/microtcp_errno.h \
  /usr/include/stdio.h \
  /usr/lib/gcc/x86_64-redhat-linux/13/include/stdarg.h \
@@ -48,9 +47,11 @@ lib/CMakeFiles/microtcp.dir/microtcp.c.o: \
  /home/george/Documents/CSD/CS-335_Computer_Networks/Winter_Semester/ProjectPhaseB/A/microTCP/lib/bitstream.h \
  /usr/include/stdlib.h /usr/include/bits/waitflags.h \
  /usr/include/bits/waitstatus.h /usr/include/alloca.h \
- /usr/include/bits/stdlib-float.h /usr/include/string.h \
- /usr/include/bits/types/locale_t.h /usr/include/bits/types/__locale_t.h \
- /usr/include/strings.h /usr/include/sys/time.h /usr/include/time.h \
- /usr/include/bits/time.h /usr/include/bits/types/struct_tm.h \
+ /usr/include/bits/stdlib-float.h \
+ /home/george/Documents/CSD/CS-335_Computer_Networks/Winter_Semester/ProjectPhaseB/A/microTCP/lib/send_handler.h \
+ /usr/include/string.h /usr/include/bits/types/locale_t.h \
+ /usr/include/bits/types/__locale_t.h /usr/include/strings.h \
+ /usr/include/sys/time.h /usr/include/time.h /usr/include/bits/time.h \
+ /usr/include/bits/types/struct_tm.h \
  /usr/include/bits/types/struct_itimerspec.h \
  /usr/lib/gcc/x86_64-redhat-linux/13/include/stdbool.h

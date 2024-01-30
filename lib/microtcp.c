@@ -342,49 +342,28 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
                 return -1;
         }
 
-        const size_t max_payload_size = MICROTCP_MSS - sizeof(microtcp_header_t);
         size_t remaining_bytes = length;
-        size_t acknowledged_bytes = 0;
-        size_t starting_seq_number = socket->seq_number;
-        size_t buffer_index = socket->seq_number - starting_seq_number; /* Index used to segment buffer (given by caller). */
-
-        /* Check for leftover SYN packets.*/
+        size_t buffer_index = 0;
+        size_t sender_continuous_fails_counter = 0; /* UNSUED IDEA. */
 
         while (remaining_bytes > 0)
         {
-                size_t payload_size = MIN(remaining_bytes, max_payload_size);
-                /* Data that the sender is typically allowed to send, respecting
-                both receiver's capacityand network's current congestion stat. */
-                size_t effective_window_size  = MIN(socket->cwnd, socket->curr_win_size);
-                
-                if (socket->unacknowledged_queue->unacknowledged_bytes + payload_size > effective_window_size)
+                /* Sends as many packets as possible, until queue has reached its limit. */
+                int sender_ret_val = packet_sender(socket, buffer, length, &buffer_index);
+                if (sender_ret_val < 0)
                 {
-
-                        /* Retrieve ACKnowledgements. */
-                        continue;
-                }
-
-                size_t bitstream_len = 0;
-                socket->seq_number += payload_size;  /* Update seq_number. */
-                void *bitstream = create_bitstream(socket, ACK_BIT, buffer + buffer_index, payload_size, &bitstream_len);
-                if (bitstream == NULL)
-                {
-                        microtcp_set_errno(BITSTREAM_CREATION_FAILED);
-                        socket->seq_number -= payload_size;
+                        microtcp_set_errno(SEND_HANDLER_FAILED);
                         return -1;
                 }
-                ssize_t send_ret_val = sendto(socket->sd, bitstream, bitstream_len, NO_FLAGS_BITS, socket->remote_end_host, sizeof(*(socket->remote_end_host)));
-                if (send_ret_val < 0)
+                int verifier_ret_val = packet_verifier();
+                if (verifier_ret_val < 0)
                 {
-                        microtcp_set_errno(SENDTO_FAILED);
-                        socket->seq_number -= payload_size;
-                        free(bitstream);
+                        microtcp_set_errno(SEND_HANDLER_FAILED);
                         return -1;
                 }
-                bs_enqueue(socket->unacknowledged_queue, bitstream, bitstream_len);
-                socket->bytes_send += bitstream_len;
-                socket->packets_send++;
-                buffer_index += payload_size;
+
+                remaining_bytes -= verifier_ret_val;
+                buffer_index += verifier_ret_val;
         }
 }
 

@@ -47,7 +47,8 @@ void bs_enqueue(struct bitstream_queue *const queue, void *const bitstream, cons
 
         /* Node initialization. */
         node->bitstream = bitstream;
-        node->required_ack_number = ((microtcp_header_t *)bitstream)->seq_number;
+        node->bitstream_size = bitstream_len;
+        node->required_ack_number = ((microtcp_header_t *)bitstream)->seq_number + 1;
         node->next = NULL;
 
         if (bs_is_empty_queue(queue))
@@ -76,7 +77,7 @@ void bs_dequeue(struct bitstream_queue *queue)
 
         if (queue->unacknowledged_bytes < 0)
                 microtcp_set_errno(BS_QUEUE); /* Queue can not hold negative number of info (bytes. )*/
-
+        free(old_front->bitstream);
         free(old_front);
 }
 
