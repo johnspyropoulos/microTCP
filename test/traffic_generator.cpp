@@ -48,6 +48,17 @@ sig_handler(int signal)
   }
 }
 
+void print_help()
+{
+  printf(
+  "Usage: traffic_generator -p port -i packet inter-arrival ms\n"
+  "Options:\n"
+  "   -p <int>            the port to wait for a peer\n"
+  "   -i <int>            the mean inter-arrival time in milliseconds of the poisson distribution\n"
+  "   -h                  prints this help\n"
+  );
+}
+
 int
 main (int argc, char **argv)
 {
@@ -67,43 +78,49 @@ main (int argc, char **argv)
   std::random_device rd;
   std::mt19937 gen(rd());
 
+  bool valid = false;
+
   /* A very easy way to parse command line arguments */
   while ((opt = getopt (argc, argv, "hp:i:")) != -1) {
     switch (opt)
       {
       case 'p':
+        valid = true;
         port = atoi (optarg);
-        /* To check or not to check? */
+
+        if (port <= 0)
+        {
+          fprintf(stderr, "Invalid port given\n");
+          exit(EXIT_FAILURE);
+        }
+
         break;
       case 'i':
         /*
          * Set the mean of the poisson distribution for the interarrivals
          * in milliseconds (ms)
          */
+        valid = true;
         mean_inter = atoi (optarg);
         break;
       default:
-        printf (
-            "Usage: bandwidth_test -p port -i packet inter-arrival ms"
-            "Options:\n"
-            "   -p <int>            the port to wait for a peer"
-            "   -i <int>            the mean inter-arrival time in milliseconds of the poisson distribution"
-            "   -h                  prints this help\n");
+        print_help();
         exit (EXIT_FAILURE);
       }
   }
+
+  if (!valid)
+  {
+    print_help();
+    exit(EXIT_FAILURE);
+  }
+
   std::poisson_distribution<int> dpoisson(mean_inter);
   LOG_INFO("Creating traffic generator on port %d", port);
   LOG_INFO("Poisson distribution inter-arrivals with mean %u ms", mean_inter);
 
-  /*
-   * Register a signal handler so we can terminate the generator with
-   * Ctrl+C
-   */
-  signal(SIGINT, sig_handler);
-
   /* Create a microtcp socket */
-  sock = microtcp_socket (AF_INET, 0, 0);
+  sock = microtcp_socket (AF_INET, SOCK_DGRAM, 0);
  /* TODO: some error checking here ??? */
 
   memset (&sin, 0, sizeof(struct sockaddr_in));
@@ -138,6 +155,12 @@ main (int argc, char **argv)
   std::this_thread::sleep_for (std::chrono::seconds(1));
   LOG_INFO("Start generating traffic...");
 
+    /*
+   * Register a signal handler so we can terminate the generator with
+   * Ctrl+C
+   */
+  signal(SIGINT, sig_handler);
+
   while(stop_traffic == false) {
     std::this_thread::sleep_for(std::chrono::milliseconds(dpoisson(gen)));
     microtcp_send(&sock, buffer, BUF_LEN, 0);
@@ -147,5 +170,4 @@ main (int argc, char **argv)
 
   /* SHUT_RDWR can be omitted internally */
   microtcp_shutdown(&sock, SHUT_RDWR);
-
 }

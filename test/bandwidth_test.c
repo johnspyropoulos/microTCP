@@ -142,6 +142,7 @@ int server_tcp(uint16_t listen_port, const char* file_path)
 
     double total_time = end_time.tv_sec - start_time.tv_sec + (end_time.tv_nsec - start_time.tv_nsec) * 1e-9;
     double total_mb = total_bytes / (1024.0 * 1024.0);
+    printf("Time elapsed: %0.1f seconds\n", total_time);
     printf("Average download speed: %.2f MB/s\n", total_mb / total_time);
 
     free(recvbuf);
@@ -245,6 +246,7 @@ int client_tcp(const char* server_ip, uint16_t server_port, const char* file_pat
 
     double total_time = end_time.tv_sec - start_time.tv_sec + (end_time.tv_nsec - start_time.tv_nsec) * 1e-9;
     double total_mb = total_bytes / (1024.0 * 1024.0);
+    printf("Time elapsed: %0.1f seconds\n", total_time);
     printf("Average upload speed: %.2f MB/s\n", total_mb / total_time);
 
     shutdown(sockfd, SHUT_RDWR);
@@ -343,6 +345,7 @@ int server_microtcp(uint16_t listen_port, const char* file_path)
 
     double total_time = end_time.tv_sec - start_time.tv_sec + (end_time.tv_nsec - start_time.tv_nsec) * 1e-9;
     double total_mb = total_bytes / (1024.0 * 1024.0);
+    printf("Time elapsed: %0.1f seconds\n", total_time);
     printf("Average download speed: %.2f MB/s\n", total_mb / total_time);
 
     free(recvbuf);
@@ -441,6 +444,7 @@ int client_microtcp(const char* server_ip, uint16_t server_port, const char* fil
 
     double total_time = end_time.tv_sec - start_time.tv_sec + (end_time.tv_nsec - start_time.tv_nsec) * 1e-9;
     double total_mb = total_bytes / (1024.0 * 1024.0);
+    printf("Time elapsed: %0.1f seconds\n", total_time);
     printf("Average upload speed: %.2f MB/s\n", total_mb / total_time);
 
     microtcp_shutdown(&socket, SHUT_RDWR);
