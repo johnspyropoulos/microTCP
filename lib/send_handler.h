@@ -6,6 +6,8 @@
 #include "microtcp_errno.h"
 #include "microtcp.h"
 #include "bitstream.h"
+#include "send_handler.h"
+#include "recv_handler.h"
 
 /**
  * @returns Amounts of bytes sent from buffer_index and after.
@@ -18,7 +20,7 @@ int packet_sender(microtcp_sock_t *socket, const void *const buffer, size_t leng
         size_t payload_size = MIN(remaining_bytes, max_payload_size);
 
         /* Data that the sender is typically allowed to send, respecting
-        both receiver's capacityand network's current congestion stat. */
+        both receiver's capacity and network's current congestion stat. */
         size_t effective_window_size = MIN(socket->cwnd, socket->curr_win_size);
 
         size_t byte_sent_counter = 0;
@@ -99,13 +101,12 @@ int packet_verifier(microtcp_sock_t *socket)
         uint8_t duplicate_ack_counter = 0;
         size_t last_received_ack_number = socket->ack_number;
 
-
         while (!bs_is_empty_queue(socket->unacknowledged_queue))
         {
                 ssize_t recv_ret_val = recvfrom(socket->sd, static_bitsteam, MICROTCP_MSS, NO_FLAGS_BITS, socket->remote_end_host, &addr_len);
-                if (recv_ret_val < 0)  /* Timeout exceeded. No ACKs received in timeout period. */
+                if (recv_ret_val < 0) /* Timeout exceeded. No ACKs received in timeout period. */
                         break;
-                if (!is_valid_bistream(static_bitsteam))  /* Check bitstream's validity, if invalid discard. */
+                if (!is_valid_bistream(static_bitsteam)) /* Check bitstream's validity, if invalid discard. */
                         continue;
                 microtcp_header_t *header = (microtcp_header_t *)static_bitsteam;
                 if (header->control != ACK_BIT)
@@ -114,7 +115,7 @@ int packet_verifier(microtcp_sock_t *socket)
                         continue;
                 }
 
-                if (header->control & FIN_BIT)  /* Packet contained a FIN_BIT shutdown() shall be called. */
+                if (header->control & FIN_BIT) /* Packet contained a FIN_BIT shutdown() shall be called. */
                 {
 
                         /* TODO: Call Shutdown, from sender. */
@@ -123,18 +124,45 @@ int packet_verifier(microtcp_sock_t *socket)
 
                 if (header->ack_number)
 
-                verified_bytes += acknowldge_up_to(socket, header->ack_number);
+                        verified_bytes += acknowldge_up_to(socket, header->ack_number);
 
                 /* ACK packet, might also contain data. */
                 if (header->data_len > 0)
                 {
-/*                         size_t available_space_in_buffer = MICROTCP_RECVBUF_LEN - socket->buf_fill_level; */
+                        /*                         size_t available_space_in_buffer = MICROTCP_RECVBUF_LEN - socket->buf_fill_level; */
                         /* SO far we do not accept mixed packets. But we should implement. */
                         ;
                 }
-
         }
         return verified_bytes;
+}
+
+/**
+ * @brief Pure ACK packets, have the sole purpose of acknowledging.
+ * The do NOT carry any payload and the only active contol-bit
+ * they have is the ACK_BIT.
+ */
+ssize_t send_pure_ack_packet(microtcp_sock_t *socket)
+{
+        const uint16_t control_ = ACK_BIT;
+        size_t bitstream_len = 0;
+        socklen_t addr_len = sizeof(*(socket->remote_end_host));
+        void *bitstream = create_bitstream(socket, control_, NULL, 0, &bitstream_len);
+        if (bitstream == NULL || bitstream_len != sizeof(microtcp_header_t))
+        {
+                microtcp_set_errno(BITSTREAM_CREATION_FAILED);
+                return -1;
+        }
+        ssize_t sendto_ret_val = sendto(socket->sd, bitstream, bitstream_len, NO_FLAGS_BITS, socket->remote_end_host, addr_len);
+        if (sendto_ret_val < 0)
+        {
+                microtcp_set_errno(SENDTO_FAILED);
+                free(bitstream);
+                return -1;
+        }
+        socket->packets_send++;
+        socket->bytes_send += bitstream_len;
+        return bitstream_len;
 }
 
 #endif

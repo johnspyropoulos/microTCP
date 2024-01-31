@@ -131,8 +131,9 @@ void *create_bitstream(const microtcp_sock_t *const socket, uint16_t control, co
         return bitstream;
 }
 
-int is_valid_bistream(void *const bitstream)
+int is_valid_bistream(const void *const bitstream)
 {
+        /* Carefully removing const with cast. But the bitstream is returned as it was given. */
         uint32_t *bitstream_checksum = &(((microtcp_header_t *)bitstream)->checksum);
         size_t bitstream_size = sizeof(microtcp_header_t) + ((microtcp_header_t *)bitstream)->data_len;
 

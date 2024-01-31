@@ -27,15 +27,22 @@ enum MICROTCP_ERRNO
     ACK_NUMBER_MISMATCH,
     HANDSHAKE_FAILED,
     SENDTO_FAILED,
-    RECVFROM_CORRUPTED,
+    RECVFROM_CORRUPTED_PACKET,
     CHECKSUM_VALIDATION_FAILED,
     BS_QUEUE,
-    SEND_HANDLER_FAILED
+    SEND_HANDLER_FAILED,
+    RECV_HANDLER_FAILED,
+    SEND_ACK_FAILED
 };
 
 extern enum MICROTCP_ERRNO MICRO_ERRNO;
 
-static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *file_name_,  const char *function_name_, int line_)
+static void microtcp_clear_errno(void)
+{
+    MICRO_ERRNO = ALL_GOOD;
+}
+
+static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *file_name_, const char *function_name_, int line_)
 {
     const char *error_message;
     MICRO_ERRNO = errno_;
@@ -81,7 +88,7 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *file_name
     case SENDTO_FAILED:
         error_message = "Sendind bit-stream with UDP::sendto() failed.";
         break;
-    case RECVFROM_CORRUPTED:
+    case RECVFROM_CORRUPTED_PACKET:
         error_message = "UDP::recvfrom returned corrupted data.";
         break;
     case CHECKSUM_VALIDATION_FAILED:
@@ -95,6 +102,12 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *file_name
         break;
     case SEND_HANDLER_FAILED:
         error_message = "Send handler failed.";
+        break;
+    case RECV_HANDLER_FAILED:
+        error_message = "Receive handle failed.";
+        break;
+    case SEND_ACK_FAILED:
+        error_message = "Sending ACKnowledgment back to the receiver failed.";
         break;
     default:
         error_message = "Unknown microtcp error number (default).";

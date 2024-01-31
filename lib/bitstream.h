@@ -48,5 +48,5 @@ void *create_bitstream(const microtcp_sock_t *const socket, uint16_t control, co
  */
 microtcp_segment_t *extract_bitstream(void *const bitstream);
 
-int is_valid_bistream(void *const bitstream);
+int is_valid_bistream(const void *const bitstream);
 #endif

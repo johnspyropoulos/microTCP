@@ -34,6 +34,10 @@
 #include <netinet/in.h>
 #include <stdint.h>
 
+#include "bitstream.h"
+#include "recv_handler.h"
+#include "send_handler.h"
+
 /*
  * Several useful constants
  */
@@ -52,8 +56,8 @@
 #define INITIAL_CHECKSUM_VALUE 0
 #define NO_FLAGS_BITS 0
 
-#define MIN(X,Y) (X < Y) ? X : Y
-#define MAX(X,Y) (X > Y) ? X : Y
+#define MIN(X,Y) ((X < Y) ? (X) : (Y))
+#define MAX(X,Y) ((X > Y) ? (X) : (Y))
 
 /**
  * Possible states of the microTCP socket
@@ -86,6 +90,7 @@ typedef struct
         size_t init_win_size;   /**< The window size negotiated at the 3-way handshake */
         size_t curr_win_size;   /**< The current window size */
 
+        
         uint8_t *recvbuf; /**< The *receive* buffer of the TCP
                                connection. It is allocated during the connection establishment and
                                is freed at the shutdown of the connection. This buffer is used
@@ -97,6 +102,8 @@ typedef struct
            form that has been sent to the receiver and has not
            yet been acknowledged.
         */
+        struct reordering_queue *data_reorder_queue;
+
         size_t buf_fill_level; /**< Amount of data in the buffer */
 
         size_t cwnd; /* Bytes that can be sent before receiving an ACK. */

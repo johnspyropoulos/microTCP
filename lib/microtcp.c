@@ -30,6 +30,7 @@
 #include "microtcp_errno.h"
 #include "bitstream.h"
 #include "send_handler.h"
+#include "recv_handler.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +68,8 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
         if ((micro_sock.recvbuf = malloc(MICROTCP_RECVBUF_LEN)) == NULL)
                 microtcp_set_errno(MALLOC_FAILED);
         if ((micro_sock.unacknowledged_queue = bs_create_queue()) == NULL)
+                microtcp_set_errno(BS_QUEUE);
+        if ((micro_sock.data_reordering_queue = bs_create_queue()) == NULL)
                 microtcp_set_errno(BS_QUEUE);
 
         micro_sock.buf_fill_level = 0;
@@ -154,6 +157,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                         return -1;
                 }
                 socket->packets_send++;
+                socket->bytes_send += syn_ret_val;
 
                 /* Receive ACK-SYN packet. */
                 ssize_t ack_syn_ret_val = recvfrom(socket->sd, socket->recvbuf, stream_len, NO_FLAGS_BITS, (struct sockaddr *)address, &address_len);
@@ -164,10 +168,11 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
                         previous sending. Thus the previous packet is considered lost. */
                         continue; /* Nothing in receive buffers yet. */
                 }
-                socket->packets_received++;                              /* We got somesort of a packet. */
+                socket->packets_received++; /* We got somesort of a packet. */
+                socket->bytes_send += ack_syn_ret_val;
                 if ((size_t)ack_syn_ret_val < sizeof(microtcp_header_t)) /* Possible corrupted UDP packet. */
                 {
-                        microtcp_set_errno(RECVFROM_CORRUPTED);
+                        microtcp_set_errno(RECVFROM_CORRUPTED_PACKET);
                         socket->packets_lost++;
                         continue;
                 }
@@ -216,6 +221,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address, so
         memcpy(socket->servaddr, address, address_len);
         socket->remote_end_host = socket->servaddr;
         socket->packets_send++;
+        socket->bytes_send += ack_ret_val;
         socket->state = ESTABLISHED;
         free(bitstream_send);
         return 0;
@@ -236,9 +242,10 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
                 if (syn_ret_val < 0)
                         continue;
                 socket->packets_received++;
+                socket->bytes_received += syn_ret_val;
                 if ((size_t)syn_ret_val < sizeof(microtcp_header_t)) /* Corrupted UDP packet. */
                 {
-                        microtcp_set_errno(RECVFROM_CORRUPTED);
+                        microtcp_set_errno(RECVFROM_CORRUPTED_PACKET);
                         continue;
                 }
                 microtcp_segment_t *syn_segment = extract_bitstream(socket->recvbuf);
@@ -281,6 +288,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
                         return -1;
                 }
                 socket->packets_send++;
+                socket->bytes_send += ack_syn_ret_val;
                 ssize_t ack_ret_val = recvfrom(socket->sd, socket->recvbuf, stream_len, NO_FLAGS_BITS, address, &address_len);
                 if (ack_ret_val < 0) /* No repsonse yet. */
                 {
@@ -290,9 +298,10 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address, socklen_t
                         continue; /* Nothing in receive buffers yet. */
                 }
                 socket->packets_received++;
+                socket->bytes_received += ack_ret_val;
                 if ((size_t)ack_ret_val < sizeof(microtcp_header_t)) /* Possibly corrupted UDP packet. */
                 {
-                        microtcp_set_errno(RECVFROM_CORRUPTED);
+                        microtcp_set_errno(RECVFROM_CORRUPTED_PACKET);
                         continue;
                 }
                 microtcp_segment_t *ack_segment = extract_bitstream(socket->recvbuf);
@@ -369,35 +378,25 @@ ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer, size_t length
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length, int flags)
 {
-        static uint8_t left_over_data[MICROTCP_MSS];
-        static size_t left_over_data_byte_count = 0;
-        ssize_t received_byte_counter = 0;
-        uint8_t local_recv_buffer[MICROTCP_MSS];
-        socklen_t addr_len = sizeof(*(socket->remote_end_host))
-
-            if (socket->state != ESTABLISHED)
+        socklen_t addr_len = sizeof(*(socket->remote_end_host));
+        ssize_t bytes_in_buffer = 0;
+        if (socket->state != ESTABLISHED)
         {
                 microtcp_set_errno(SOCKET_STATE_NOT_ESTABLISHED);
                 return -1;
         }
 
-        if (socket->buf_fill_level > 0)
+        if (bytes_in_buffer = fetch_buffered_data(socket, buffer, length) < 0)
         {
-                /* Empty buffer first. */
-                ;
+                microtcp_set_errno(RECV_HANDLER_FAILED);
+                return -1;
         }
 
-        uint8_t local_recv_buffer[MICROTCP_MSS];
-        ssize_t recv_ret_val = recvfrom(socket->sd, local_recv_buffer, MICROTCP_MSS, NO_FLAGS_BITS, socket->remote_end_host, &addr_len);
-        if (recv_ret_val > length)
+        if (fetch_new_data(socket, buffer, &bytes_in_buffer, length) < 0 )
         {
-                memcpy(buffer, local_recv_buffer, length);
-                memcpy(left_over_data, local_recv_buffer + length, recv_ret_val - length);
+                microtcp_set_errno(RECV_HANDLER_FAILED);
+                return -1;
         }
 
-        /* Check if receive_buffer has something. */
-        /* If not then use UDP::recvfrom(). */
-        /* When using UDP::recvfrom() use MSS as length.
-           if user requested less bytes, just buffer them. */
-        /* Buffer shall contain only payload. Not headers or Bitstreams. */
+        return bytes_in_buffer;
 }
