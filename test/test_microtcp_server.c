@@ -25,11 +25,11 @@
 
 /**
  * CS335 - Project Phase A
- * 
+ *
  * Ioannis Spyropoulos - csd5072
  * Georgios Evangelinos - csd4624
  * Niki Psoma - csd5038
-*/
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,8 +44,7 @@
 
 #define PORT 54321
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     struct sockaddr_in servaddr;
     struct sockaddr_in clientaddr;
@@ -60,29 +59,15 @@ main(int argc, char **argv)
     servaddr.sin_port = htons(PORT);
 
     printf("Binding...\n");
-    microtcp_bind(&tcpsocket, (const struct sockaddr*) &servaddr, sizeof(servaddr));
+    microtcp_bind(&tcpsocket, (const struct sockaddr *)&servaddr, sizeof(servaddr));
     printf("Bind successful\n");
 
     printf("Waiting for connection request...\n");
-    microtcp_accept(&tcpsocket, (struct sockaddr*) &clientaddr, sizeof(clientaddr));
+    microtcp_accept(&tcpsocket, (struct sockaddr *)&clientaddr, sizeof(clientaddr));
     printf("Connected\n");
 
-    const char* rmsg = "Message received";
-
-/*     char buff[1024] = {0};
-    do
-    {
-        int bytes_rec = microtcp_recv(&tcpsocket, buff, 1024, NO_FLAGS_BITS);
-        buff[bytes_rec] = '\0';
-        if (tcpsocket.state == ESTABLISHED)
-        {
-            printf("From client: %s", buff);
-            microtcp_send(&tcpsocket, rmsg, 17, NO_FLAGS_BITS);
-        }
-    } while (tcpsocket.cliaddr != NULL);
-
-    printf("Connection closed by peer\n");
- */
+    uint8_t rebuffer[1000000];
+    microtcp_recv(&tcpsocket, rebuffer, 1000000, NO_FLAGS_BITS);
 
     return EXIT_SUCCESS;
 }

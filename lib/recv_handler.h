@@ -12,7 +12,7 @@
 
 struct reordering_node
 {
-        void *pure_payload; /* Without header*/
+        void *payload; /* Without header*/
         uint32_t payload_len;
         uint32_t seq_number;
         struct reordering_node *next;
@@ -22,7 +22,8 @@ struct reordering_queue
 {
         struct reordering_node *head;
         struct reordering_node *tail;
-        uint32_t bytes_kept;
+        uint32_t stored_bytes;
+        uint32_t maximum_no_stored_bytes;
 };
 
 struct reordering_queue *rq_create_queue(void)
@@ -35,8 +36,8 @@ struct reordering_queue *rq_create_queue(void)
         }
         queue->head = NULL;
         queue->tail = NULL;
-        queue->bytes_kept = 0;
-
+        queue->stored_bytes = 0;
+        queue->maximum_no_stored_bytes = MICROTCP_RECVBUF_LEN;
         return queue;
 }
 
@@ -62,18 +63,18 @@ void rq_enqueue(struct reordering_queue *const queue, const void *const pure_pay
                 microtcp_set_errno(MALLOC_FAILED);
                 return;
         }
-        new_node->pure_payload = malloc(payload_len_);
-        if (new_node->payload_len ==  NULL)
+        new_node->payload = malloc(payload_len_);
+        if (new_node->payload == NULL)
         {
                 microtcp_set_errno(MALLOC_FAILED);
                 return;
         }
-        memcpy(new_node->pure_payload, pure_payload_, payload_len_);
+        memcpy(new_node->payload, pure_payload_, payload_len_);
         new_node->payload_len = payload_len_;
         new_node->seq_number = seq_number_;
         new_node->next = NULL;
 
-        queue->bytes_kept += new_node->payload_len;
+        queue->stored_bytes += new_node->payload_len;
         if (rq_is_empty_queue(queue))
         {
                 queue->head = queue->tail = new_node;
@@ -82,7 +83,7 @@ void rq_enqueue(struct reordering_queue *const queue, const void *const pure_pay
 
         if (new_node->seq_number < queue->head->seq_number)
         {
-                new_node->next = queue->head->seq_number;
+                new_node->next = queue->head;
                 queue->head = new_node;
                 return;
         }
@@ -106,8 +107,6 @@ void rq_enqueue(struct reordering_queue *const queue, const void *const pure_pay
         prev_current->next = new_node;
         queue->tail = new_node;
 }
-
-
 
 /**
  * @brief Copies data from a microTCP socket's internal receive buffer to a specified user buffer,
@@ -204,12 +203,50 @@ static ssize_t fetch_new_data_packet(microtcp_sock_t *const socket, void *const 
 }
 
 /* Receives a packet, maybe puts it in reordering queue. */
-static ssize_t send_to_reordering_queue(microtcp_sock_t *socket, void *bitstream_buffer, size_t bitstream_len)
+static void send_to_reordering_queue(microtcp_sock_t *socket, void *bitstream_buffer, size_t bitstream_len)
 {
         microtcp_header_t *packet_header = (microtcp_header_t *)bitstream_buffer;
-        if (packet_header->seq_number >= socket->seq_number + 0)
+        /* If packet's sequence number is to large, compared to the state of the socket, then it can not enter in the reorder queue, due to memory limitations. */
+        if (packet_header->seq_number >= socket->seq_number + socket->data_reorder_queue->maximum_no_stored_bytes)
+                return;
+        rq_enqueue(socket->data_reorder_queue, bitstream_buffer + sizeof(microtcp_header_t), packet_header->data_len, packet_header->seq_number);
+}
+
+void extract_available_data(microtcp_sock_t *socket, void *const buffer, size_t *bytes_in_buffer, size_t length)
+{
+        uint32_t current_ack_number = socket->ack_number;
+        struct reordering_node *current_node = socket->data_reorder_queue->head;
+
+        while (current_node)
         {
-                ;
+                struct reordering_node *current_node_copy = current_node;
+                if (current_ack_number - 1 + current_node->payload_len == current_node->seq_number)
+                {
+                        socket->ack_number = current_node->seq_number + 1;
+                        send_pure_ack_packet(socket);
+                        socket->data_reorder_queue->head = current_node->next;
+                        size_t available_space = length - *bytes_in_buffer;
+                        if (current_node->payload_len <= available_space)
+                        {
+                                memcpy(buffer + *bytes_in_buffer, current_node->payload, current_node->payload_len);
+                                *bytes_in_buffer += current_node->payload_len;
+                                current_node = current_node->next;
+                                free(current_node_copy->payload);
+                                free(current_node_copy);
+                        }
+                        else
+                        {
+                                memcpy(buffer + *bytes_in_buffer, current_node->payload, available_space);
+                                *bytes_in_buffer += available_space;
+                                memcpy(socket->recvbuf + socket->buf_fill_level, current_node->payload + available_space, current_node->payload_len - available_space);
+                                socket->buf_fill_level += current_node->payload_len - available_space;
+                                free(current_node->payload);
+                                free(current_node);
+                                return;
+                        }
+                        continue;
+                }
+                break;
         }
 }
 
@@ -233,8 +270,11 @@ ssize_t fetch_new_data(microtcp_sock_t *socket, void *const buffer, size_t *cons
                 if (new_packet_bytes == 0) /* There where no valid packets to receive. Timeout exceeded. */
                         break;
                 send_to_reordering_queue(socket, local_bitstream_buffer, new_packet_bytes);
-                /* Do a sequencial extraction to user's buffer. Remember buffer mgiht be half full. */
-                /* Well... We maybe have received a new packet. But maybe the sender did not */
+                /* Check if you can retrieve data. */
+                extract_available_data(socket, buffer, bytes_in_buffer, length);
+                if (*bytes_in_buffer == length)
+                        break;
         }
+        return *bytes_in_buffer;
 }
 #endif

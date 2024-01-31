@@ -34,10 +34,6 @@
 #include <netinet/in.h>
 #include <stdint.h>
 
-#include "bitstream.h"
-#include "recv_handler.h"
-#include "send_handler.h"
-
 /*
  * Several useful constants
  */

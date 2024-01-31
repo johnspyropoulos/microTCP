@@ -30,6 +30,7 @@ enum MICROTCP_ERRNO
     RECVFROM_CORRUPTED_PACKET,
     CHECKSUM_VALIDATION_FAILED,
     BS_QUEUE,
+    RQ_QUEUE,
     SEND_HANDLER_FAILED,
     RECV_HANDLER_FAILED,
     SEND_ACK_FAILED
@@ -98,7 +99,10 @@ static void microtcp_set_errno(enum MICROTCP_ERRNO errno_, const char *file_name
         error_message = "Argument was invalid, check function and line to determine why.";
         break;
     case BS_QUEUE:
-        error_message = "Something went wrong with struct bitstream_queue check function and line to determine.";
+        error_message = "Something went wrong with struct bitstream_queue check file, function and line to determine.";
+        break;
+    case RQ_QUEUE:
+        error_message = "Somethign went wrong with struct reordering_queue check file, function and line to determine. ";
         break;
     case SEND_HANDLER_FAILED:
         error_message = "Send handler failed.";

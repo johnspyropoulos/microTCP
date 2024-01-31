@@ -6,8 +6,6 @@
 #include "microtcp_errno.h"
 #include "microtcp.h"
 #include "bitstream.h"
-#include "send_handler.h"
-#include "recv_handler.h"
 
 /**
  * @returns Amounts of bytes sent from buffer_index and after.

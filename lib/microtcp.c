@@ -69,13 +69,13 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol)
                 microtcp_set_errno(MALLOC_FAILED);
         if ((micro_sock.unacknowledged_queue = bs_create_queue()) == NULL)
                 microtcp_set_errno(BS_QUEUE);
-        if ((micro_sock.data_reordering_queue = bs_create_queue()) == NULL)
-                microtcp_set_errno(BS_QUEUE);
+        if ((micro_sock.data_reorder_queue = rq_create_queue()) == NULL)
+                microtcp_set_errno(RQ_QUEUE);
 
         micro_sock.buf_fill_level = 0;
         micro_sock.ssthresh = MICROTCP_INIT_SSTHRESH;
         srand(time(NULL));
-        micro_sock.seq_number = rand() | 0b1; /* Random number not zero. */
+        micro_sock.seq_number = (rand() | 0b1) % 10000; /* Random number not zero. */
         micro_sock.ack_number = 0;            /* Undefined. */
         micro_sock.packets_send = 0;
         micro_sock.packets_received = 0;
