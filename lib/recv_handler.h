@@ -97,12 +97,13 @@ void rq_enqueue(struct reordering_queue *const queue, const void *const pure_pay
                 {
                         current = current->next;
                 }
-                else if (current->seq_number > new_node->seq_number)
+                else if (current->seq_number >= new_node->seq_number)
                 {
                         prev_current->next = new_node;
                         new_node->next = current;
                         return;
                 }
+
         }
         prev_current->next = new_node;
         queue->tail = new_node;
@@ -223,6 +224,7 @@ void extract_available_data(microtcp_sock_t *socket, void *const buffer, size_t 
                 if (current_ack_number - 1 + current_node->payload_len == current_node->seq_number)
                 {
                         socket->ack_number = current_node->seq_number + 1;
+                        socket->seq_number += /* + payload size which is 0 */ 1;
                         send_pure_ack_packet(socket);
                         socket->data_reorder_queue->head = current_node->next;
                         size_t available_space = length - *bytes_in_buffer;

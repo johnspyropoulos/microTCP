@@ -66,8 +66,8 @@ int main(int argc, char **argv)
     microtcp_accept(&tcpsocket, (struct sockaddr *)&clientaddr, sizeof(clientaddr));
     printf("Connected\n");
 
-    uint8_t rebuffer[1000000];
-    microtcp_recv(&tcpsocket, rebuffer, 1000000, NO_FLAGS_BITS);
+    uint8_t rebuffer[10000];
+    microtcp_recv(&tcpsocket, rebuffer, 10000, NO_FLAGS_BITS);
 
     return EXIT_SUCCESS;
 }
